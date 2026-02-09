@@ -1558,7 +1558,15 @@
                 aimGroup.position.copy(player.mesh.position);
             }
             
-            controls.update();
+            // [추가] 카메라 추적 시스템 (Camera Follow System)
+            // 현재 턴인 플레이어의 공 위치를 가져옴
+            const activePlayer = players[gameState.currentPlayer - 1];
+            
+            // OrbitControls의 타겟(바라보는 점)을 플레이어 위치로 부드럽게 이동 (Lerp)
+            // 0.05 수치는 따라가는 속도 (낮을수록 부드럽고 느림)
+            controls.target.lerp(activePlayer.mesh.position, 0.05);
+            
+            controls.update(); // 업데이트 필수
             renderer.render(scene, camera);
         }
 
