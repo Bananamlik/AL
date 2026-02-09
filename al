@@ -731,7 +731,9 @@
             
             // Visual
             trailSpacing: 0.25,
-            trailSpeedThreshold: 0.3
+            trailSpeedThreshold: 0.3,
+            captureRadius: 0.5,     // 이 거리 안으로 돌아오면 폐곡선 인정
+            minLoopLength: 10       // 최소 10개의 발자국 이상이어야 인정 (제자리 돌기 방지)
         };
 
         // ==========================================
@@ -953,7 +955,8 @@
             );
             mesh.add(hitBox);
 
-            return { body, mesh, hitBox, lastTrailPos: position.clone() };
+            // path: [[x,y,z], [x,y,z]...] 형태의 좌표 기록용
+            return { body, mesh, hitBox, lastTrailPos: position.clone(), path: [] };
         }
 
         players.push(createPlayer(
@@ -1005,7 +1008,79 @@
         // TRAIL SYSTEMS (Separate for each player)
         // ==========================================
         const TRAIL_MAX = 1000;
-        
+
+        // ==========================================
+        // 🧠 LOOP DETECTION ALGORITHM
+        // ==========================================
+        function checkLoop(playerIdx, currentPos) {
+            const player = players[playerIdx];
+            const path = player.path;
+            const historyLen = path.length;
+
+            // 최소 길이 미달이면 패스
+            if (historyLen < CONFIG.minLoopLength) return;
+
+            // 과거의 발자국들을 역순으로 탐색 (최근 발자국 제외)
+            // 바로 직전(buffer)의 발자국은 당연히 가까우므로 검사에서 제외해야 함
+            const buffer = 8; 
+            
+            for (let i = 0; i < historyLen - buffer; i++) {
+                const oldPos = path[i];
+                const dist = currentPos.distanceTo(oldPos);
+
+                // 🎯 폐곡선 감지 성공! (과거의 내 자취와 만남)
+                if (dist < CONFIG.captureRadius) {
+                    // 루프의 크기(길이) 계산
+                    const loopSize = historyLen - i;
+                    
+                    // 보상: 루프 크기에 비례한 대량 점수
+                    const bonusScore = Math.floor(loopSize * 0.5); 
+                    state.scores[playerIdx === 0 ? 'p1' : 'p2'] += bonusScore;
+                    
+                    // 피드백: 사운드 & UI
+                    playSound('shoot'); // 임시로 'shoot' 사운드 재사용 (성공 효과음)
+                    showFloatingText(`Capture! +${bonusScore}`, currentPos);
+
+                    // 중요: 점령 후 경로 초기화 (중복 감지 방지)
+                    // (심화 버전에서는 루프 내부만 잘라내야 하지만, 지금은 전체 초기화로 단순화)
+                    player.path = []; 
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // 💬 플로팅 텍스트 (간이 구현)
+        function showFloatingText(msg, pos) {
+            const div = document.createElement('div');
+            div.textContent = msg;
+            div.style.position = 'absolute';
+            div.style.color = '#fff';
+            div.style.fontWeight = 'bold';
+            div.style.textShadow = '0 2px 4px rgba(0,0,0,0.5)';
+            div.style.pointerEvents = 'none';
+            div.style.transform = 'translate(-50%, -50%)';
+            div.style.fontSize = '20px';
+            div.style.transition = 'all 1s ease-out';
+            
+            // 3D 좌표 -> 2D 화면 좌표 변환
+            const vector = pos.clone().project(camera);
+            const x = (vector.x * .5 + .5) * window.innerWidth;
+            const y = (-(vector.y * .5) + .5) * window.innerHeight;
+            
+            div.style.left = `${x}px`;
+            div.style.top = `${y}px`;
+            
+            document.body.appendChild(div);
+            
+            // 애니메이션 후 삭제
+            requestAnimationFrame(() => {
+                div.style.top = `${y - 50}px`;
+                div.style.opacity = '0';
+            });
+            setTimeout(() => div.remove(), 1000);
+        }
+
         function createTrailSystem(color) {
             const geometry = new THREE.SphereGeometry(0.035, 8, 8);
             const material = new THREE.MeshBasicMaterial({
@@ -1024,14 +1099,34 @@
         const trail1 = createTrailSystem(0xFF4757);
         const trail2 = createTrailSystem(0x5352ED);
 
-        function addTrail(trailSystem, position) {
-            if (trailSystem.count >= TRAIL_MAX) return;
-            
-            trailSystem.dummy.position.copy(position);
-            trailSystem.dummy.position.setLength(CONFIG.earthRadius + 0.02);
-            trailSystem.dummy.updateMatrix();
-            trailSystem.mesh.setMatrixAt(trailSystem.count++, trailSystem.dummy.matrix);
-            trailSystem.mesh.instanceMatrix.needsUpdate = true;
+        function addTrail(idx, pos) {
+            const sys = trails[idx];
+            if (sys.count >= CONFIG.trailMax) return;
+
+            // 1. 시각적 메쉬 추가 (기존 로직)
+            sys.dummy.position.copy(pos);
+            sys.dummy.position.setLength(CONFIG.earthRadius + 0.02);
+            sys.dummy.lookAt(0,0,0);
+            sys.dummy.rotateZ(Math.random() * Math.PI);
+            const s = 0.8 + Math.random() * 0.4;
+            sys.dummy.scale.set(s,s,1);
+            sys.dummy.updateMatrix();
+            sys.mesh.setMatrixAt(sys.count++, sys.dummy.matrix);
+            sys.mesh.instanceMatrix.needsUpdate = true;
+
+            // 2. [신규] 논리적 경로 저장
+            const player = players[idx];
+            const logicalPos = pos.clone(); // 깊은 복사
+            player.path.push(logicalPos);
+
+            // 3. [신규] 폐곡선 감지 시도
+            const captured = checkLoop(idx, logicalPos);
+
+            // 4. 점수 갱신 (기본 이동 점수 + 캡처 시에는 위에서 보너스 이미 추가됨)
+            if (!captured) {
+                state.scores[idx === 0 ? 'p1' : 'p2'] += 0.05; // 기본 점수는 낮춤
+            }
+            updateUI();
         }
 
         // ==========================================
