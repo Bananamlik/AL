@@ -1099,6 +1099,7 @@
 
         const trail1 = createTrailSystem(0xFF4757);
         const trail2 = createTrailSystem(0x5352ED);
+        const trails = [trail1, trail2];
 
         function addTrail(idx, pos) {
             const sys = trails[idx];
