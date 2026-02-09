@@ -1206,22 +1206,34 @@
             const deltaY = currentY - startY;
             
             const player = players[gameState.currentPlayer - 1];
-            const up = player.mesh.position.clone().normalize();
+            // 플레이어 위치에서의 법선 벡터 (지구 중심 -> 플레이어 방향)
+            const surfaceNormal = player.mesh.position.clone().normalize();
+            
+            // 1. 카메라가 보고 있는 방향(CamDir) 가져오기
             const camDir = new THREE.Vector3();
             camera.getWorldDirection(camDir);
             
-            const right = new THREE.Vector3()
-                .crossVectors(camDir, up)
+            // 2. 화면 기준 '오른쪽(Right)' 벡터 계산 (CamDir x SurfaceNormal)
+            const screenRight = new THREE.Vector3()
+                .crossVectors(camDir, surfaceNormal)
                 .normalize();
-            const forward = new THREE.Vector3()
-                .crossVectors(up, right)
+                
+            // 3. 화면 기준 '위쪽(Up)' 벡터 계산 (SurfaceNormal x ScreenRight)
+            // (주의: 순서에 따라 앞/뒤가 바뀌므로 180도 반대 구현을 위해 조정)
+            const screenUp = new THREE.Vector3()
+                .crossVectors(surfaceNormal, screenRight)
                 .normalize();
+            
+            // 4. 슬링샷 로직 (당긴 반대 방향으로 힘 작용)
+            // 마우스 오른쪽 이동(+deltaX) -> 힘은 왼쪽(-screenRight)
+            // 마우스 아래 이동(+deltaY)   -> 힘은 위쪽(+screenUp)
+            // (*화면 좌표계에서 Y축은 아래가 +이므로, 아래로 당기면 화면상 위쪽인 screenUp 방향으로 쏴야 함)
             
             const forceDir = new THREE.Vector3()
-                .addScaledVector(right, -deltaX)
-                .addScaledVector(forward, deltaY)
+                .addScaledVector(screenRight, -deltaX) 
+                .addScaledVector(screenUp, deltaY)     
                 .normalize();
-            
+                
             return { forceDir, deltaX, deltaY };
         }
 
