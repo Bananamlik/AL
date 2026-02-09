@@ -716,18 +716,18 @@
         // GAME CONFIGURATION
         // ==========================================
         const CONFIG = {
-            // Physics - Adjusted for 1/3 earth circumference
+            // Physics - 밸런스 수정됨 (지구 1/3 거리 제한)
             earthRadius: 4,
             playerRadius: 0.12,
-            gravity: 120,
-            mass: 5,
-            damping: 0.55,          // Increased damping
-            shootForce: 120,        // Reduced force
-            coriolisFactor: 0.3,    // Reduced coriolis for cleaner shots
+            gravity: 150,       // 접지력 강화
+            mass: 5,            // 무게감 증가
+            damping: 0.6,       // 마찰력 대폭 증가 (거리 제한 핵심)
+            shootForce: 90,     // 발사 힘 하향 조정
+            coriolisFactor: 0.5,// 코리올리 효과 (물리엔 적용, 가이드엔 미반영)
             
             // Game Rules
-            gameDuration: 180,      // 3 minutes
-            turnTimeLimit: 30,      // 30 seconds per turn
+            gameDuration: 180,
+            turnTimeLimit: 30,
             
             // Visual
             trailSpacing: 0.25,
@@ -769,6 +769,48 @@
         };
 
         // ==========================================
+        // SOUND SYSTEM (Synth)
+        // ==========================================
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (!gameState.settings.soundEnabled) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+
+            if (type === 'charge') { // 당길 때 (위잉-)
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(400, now + 0.1);
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'shoot') { // 발사! (퉁!)
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'turn') { // 턴 교체 (띠링)
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+        }
+
+        // ==========================================
         // SCENE SETUP
         // ==========================================
         const scene = new THREE.Scene();
@@ -780,8 +822,8 @@
             0.1,
             1000
         );
-        // Closer camera for better view
-        camera.position.set(0, 6, 12);
+        // Closer camera for better view (자신의 공 위주로 크게)
+        camera.position.set(0, 5, 10);
 
         const renderer = new THREE.WebGLRenderer({ 
             antialias: true, 
@@ -995,23 +1037,35 @@
         // ==========================================
         // AIMING SYSTEM (Simplified)
         // ==========================================
+        // ==========================================
+        // AIMING SYSTEM (Billiards Style)
+        // ==========================================
         const aimGroup = new THREE.Group();
         aimGroup.visible = false;
         scene.add(aimGroup);
 
-        // Simple arrow (no tail)
+        // 1. 앞쪽 화살표 (Arrow Head)
         const arrow = new THREE.ArrowHelper(
             new THREE.Vector3(0, 1, 0),
             new THREE.Vector3(0, 0, 0),
             1.5,
             0x72D27E,
-            0.3,
-            0.2
+            0.4, 0.3
         );
         aimGroup.add(arrow);
 
-        // Short trajectory (only initial path)
-        const TRAJ_POINTS = 30;  // Reduced from 100
+        // 2. 뒤쪽 꼬리 (Tail Line - 당기는 큐대)
+        const tailGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,1)
+        ]);
+        const tailMat = new THREE.LineBasicMaterial({ 
+            color: 0xFFFFFF, transparent: true, opacity: 0.6 
+        });
+        const tailLine = new THREE.Line(tailGeo, tailMat);
+        aimGroup.add(tailLine);
+
+        // 3. 짧은 궤적 (Short Trajectory Guide)
+        const TRAJ_POINTS = 10;  // 30 -> 10으로 축소 (초반 경로만 표시)
         const trajectoryGeometry = new THREE.BufferGeometry();
         const trajectoryPositions = new Float32Array(TRAJ_POINTS * 3);
         trajectoryGeometry.setAttribute(
@@ -1024,7 +1078,7 @@
             dashSize: 0.15,
             gapSize: 0.1,
             transparent: true,
-            opacity: 0.4  // More subtle
+            opacity: 0.4
         });
 
         const trajectoryLine = new THREE.Line(
@@ -1077,6 +1131,7 @@
         function switchTurn() {
             gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
             gameState.turn++;
+            playSound('turn');
             gameState.isPlanning = true;
             gameState.hasShot = false;
             
@@ -1235,19 +1290,27 @@
             const MAX_DRAG = 250;
             const powerRatio = Math.min(dist, MAX_DRAG) / MAX_DRAG;
             
+            // 1. Arrow Head Update
             arrow.setDirection(forceDir);
             const arrowLength = 1 + powerRatio * 2;
-            arrow.setLength(arrowLength, 0.3, 0.2);
-            arrow.setColor(
-                new THREE.Color().setHSL(0.3 * (1 - powerRatio), 1, 0.5)
-            );
-            
+            arrow.setLength(arrowLength, 0.4, 0.3);
+            arrow.setColor(new THREE.Color().setHSL(0.3 * (1 - powerRatio), 1, 0.5));
+
+            // 2. Tail Line Update (당기는 방향으로 늘어남)
+            const tailDir = forceDir.clone().negate();
+            tailLine.lookAt(tailLine.position.clone().add(tailDir));
+            tailLine.scale.z = powerRatio * 3.5; // 길이 조절
+
+            // 3. Trajectory & UI Update
             const impulseStrength = powerRatio * CONFIG.shootForce;
             const impulseVector = forceDir.clone().multiplyScalar(impulseStrength);
             const player = players[gameState.currentPlayer - 1];
             updateTrajectory(player.mesh.position, impulseVector);
             
             elements.powerFill.style.width = `${powerRatio * 100}%`;
+
+            // 4. Sound Effect (Charge)
+            if (powerRatio > 0.05) playSound('charge');
         });
 
         window.addEventListener('mouseup', (e) => {
@@ -1276,6 +1339,7 @@
             
             const player = players[gameState.currentPlayer - 1];
             player.body.applyImpulse(impulse, player.body.position);
+            playSound('shoot'); // [추가됨] 발사 사운드
             
             gameState.hasShot = true;
             gameState.isPlanning = false;
