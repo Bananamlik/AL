@@ -716,25 +716,24 @@
         // GAME CONFIGURATION
         // ==========================================
         const CONFIG = {
-            // Physics - 밸런스 수정됨 (지구 1/3 거리 제한)
             earthRadius: 4,
             playerRadius: 0.12,
-            gravity: 150,       // 접지력 강화
-            mass: 5,            // 무게감 증가
-            damping: 0.6,       // 마찰력 대폭 증가 (거리 제한 핵심)
-            shootForce: 90,     // 발사 힘 하향 조정
-            coriolisFactor: 0.5,// 코리올리 효과 (물리엔 적용, 가이드엔 미반영)
-            
-            // Game Rules
-            gameDuration: 180,
-            turnTimeLimit: 30,
-            
-            // Visual
-            trailSpacing: 0.25,
-            trailSpeedThreshold: 0.3,
-            captureRadius: 0.5,     // 이 거리 안으로 돌아오면 폐곡선 인정
-            minLoopLength: 10       // 최소 10개의 발자국 이상이어야 인정 (제자리 돌기 방지)
-        };
+            gravity: 120,        // 60 -> 120 (중력 2배: 묵직하게 바닥에 붙음)
+            mass: 5,
+            damping: 0.75,       // 0.4 -> 0.75 (마찰력 대폭 증가: 미끄러짐 방지)
+            shootForce: 135,     // 180 -> 135 (힘 하향: 제어 가능한 수준으로 변경)
+            coriolisFactor: 0.3,
+    
+    // Game Rules
+    gameDuration: 180,
+    turnTimeLimit: 30,
+    
+    // Visual
+    trailSpacing: 0.25,
+    trailSpeedThreshold: 0.3,
+    captureRadius: 0.5,
+    minLoopLength: 10
+};
 
         // ==========================================
         // GAME STATE
@@ -762,6 +761,7 @@
             
             collisions: 0,
             isRotating: false, // 🟢 [여기 추가] 카메라 회전 상태 확인용 플래그
+            isFollowing: true,
             
             settings: {
                 soundEnabled: true,
@@ -1035,16 +1035,19 @@
                     const loopSize = historyLen - i;
                     
                     // 보상: 루프 크기에 비례한 대량 점수
-                    const bonusScore = Math.floor(loopSize * 0.5); 
-                    state.scores[playerIdx === 0 ? 'p1' : 'p2'] += bonusScore;
+                    // [변경] 점수 계산은 createTerritoryArea 내부에서 정밀하게 수행함
+                    // const bonusScore = ... (삭제됨)
+                    
+                    // 🆕 [추가] 폐곡선 영역 시각화 (도장 찍기)
+                    const loopPoints = path.slice(i, historyLen);
+                    createTerritoryArea(loopPoints, playerIdx);
                     
                     // 피드백: 사운드 & UI
-                    playSound('shoot'); // 임시로 'shoot' 사운드 재사용 (성공 효과음)
-                    showFloatingText(`Capture! +${bonusScore}`, currentPos);
+                    playSound('shoot');
+                    // [이동됨] 텍스트 출력 로직 이동
 
-                    // 중요: 점령 후 경로 초기화 (중복 감지 방지)
-                    // (심화 버전에서는 루프 내부만 잘라내야 하지만, 지금은 전체 초기화로 단순화)
-                    player.path = []; 
+                    // 중요: 점령 후 경로 초기화
+                    player.path = [];
                     return true;
                 }
             }
@@ -1082,6 +1085,127 @@
             setTimeout(() => div.remove(), 1000);
         }
 
+        // 🆕 영역 표시 함수 (빗금 패턴 데칼)
+        function createTerritoryArea(points, playerIdx) {
+            if (points.length < 3 || !biomeData) return;
+
+            // 1. UV 좌표계로 변환 및 바운딩 박스 계산
+            const uvPoints = points.map(p => getUV(p));
+            let minU = 1, maxU = 0, minV = 1, maxV = 0;
+            uvPoints.forEach(p => {
+                minU = Math.min(minU, p.u); maxU = Math.max(maxU, p.u);
+                minV = Math.min(minV, p.v); maxV = Math.max(maxV, p.v);
+            });
+
+            // 캔버스 크기 최적화 (영역만큼만 생성)
+            const width = Math.floor((maxU - minU) * biomeWidth) || 64;
+            const height = Math.floor((maxV - minV) * biomeHeight) || 64;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            // 2. n각형 경로 그리기 (Local Coordinates)
+            ctx.beginPath();
+            uvPoints.forEach((p, i) => {
+                const x = (p.u - minU) * biomeWidth;
+                const y = (p.v - minV) * biomeHeight;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.closePath();
+            
+            // 3. 클리핑 & 빗금 패턴 채우기
+            ctx.save();
+            ctx.clip(); // n각형 내부만 칠해지도록 제한
+            
+            // 빗금 스타일 설정
+            ctx.strokeStyle = playerIdx === 0 ? 'rgba(255, 71, 87, 0.6)' : 'rgba(83, 82, 237, 0.6)';
+            ctx.lineWidth = 2; // 빗금 두께
+            const step = 8;    // 빗금 간격
+            const diagMax = width + height;
+            
+            ctx.beginPath();
+            for (let i = -height; i < width; i += step) {
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i + diagMax, diagMax);
+            }
+            ctx.stroke();
+            ctx.restore();
+
+            // 4. 바다 마스킹 (Pixel-Perfect Masking) & 점수 계산
+            const imgData = ctx.getImageData(0, 0, width, height);
+            const data = imgData.data;
+            let landPixelCount = 0;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+                    if (data[i + 3] > 0) { // 그려진 부분(빗금)만 검사
+                        // 전역 UV 좌표로 변환하여 실제 지형 확인
+                        const globalU = minU + (x / biomeWidth);
+                        const globalV = minV + (y / biomeHeight);
+                        
+                        if (isLandAtUV(globalU, globalV)) {
+                            landPixelCount++; // 육지면 점수
+                        } else {
+                            data[i + 3] = 0; // 바다면 투명하게 지움 (Masking)
+                        }
+                    }
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+
+            // 5. 점수 적용 (픽셀 수 기반 정밀 점수)
+            // 픽셀 수 -> 게임 점수 환산 (조정 가능)
+            const score = Math.floor(landPixelCount / 100); 
+            if (score > 0) {
+                const pKey = playerIdx === 0 ? 'player1' : 'player2';
+                gameState[pKey].territory += score;
+                showFloatingText(`Land Capture! +${score}`, points[Math.floor(points.length/2)]);
+            }
+
+            // 6. 텍스처 및 메쉬 생성
+            const texture = new THREE.CanvasTexture(canvas);
+            // n각형 중심점 계산
+            const center = new THREE.Vector3();
+            points.forEach(p => center.add(p));
+            center.divideScalar(points.length);
+            center.setLength(CONFIG.earthRadius + 0.03);
+
+            // 평면 메쉬에 텍스처 매핑 (간단한 시각화)
+            // 실제 n각형 모양은 텍스처의 투명도로 표현됨
+            const size = center.distanceTo(points[0]) * 2.5; // 적당한 크기 추정
+            const mesh = new THREE.Mesh(
+                new THREE.PlaneGeometry(size, size),
+                new THREE.MeshBasicMaterial({ 
+                    map: texture, 
+                    transparent: true, 
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                })
+            );
+            
+            mesh.position.copy(center);
+            mesh.lookAt(0, 0, 0); // 지구 중심 바라보기
+            scene.add(mesh);
+
+            // 5초 후 페이드 아웃
+            setTimeout(() => {
+                const fade = setInterval(() => {
+                    mesh.material.opacity -= 0.05;
+                    if (mesh.material.opacity <= 0) {
+                        clearInterval(fade);
+                        scene.remove(mesh);
+                        texture.dispose();
+                        mesh.geometry.dispose();
+                        mesh.material.dispose();
+                    }
+                }, 50);
+            }, 5000);
+        }
+
         function createTrailSystem(color) {
             const geometry = new THREE.SphereGeometry(0.035, 8, 8);
             const material = new THREE.MeshBasicMaterial({
@@ -1101,9 +1225,61 @@
         const trail2 = createTrailSystem(0x5352ED);
         const trails = [trail1, trail2];
 
-        function addTrail(sys, pos) {  // 인덱스 대신 객체를 받도록 변경
-            if (sys.count >= CONFIG.trailMax) return;
-            // trails[idx] 제거하고 sys 직접 사용
+        // ==========================================
+        // 🌍 TRUE LAND CAPTURE SYSTEM
+        // ==========================================
+        let biomeData = null;
+        let biomeWidth = 0;
+        let biomeHeight = 0;
+
+        const biomeImg = new Image();
+        biomeImg.crossOrigin = "Anonymous";
+        biomeImg.src = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg';
+        
+        biomeImg.onload = () => {
+            const canvas = document.createElement('canvas');
+            biomeWidth = canvas.width = biomeImg.width;
+            biomeHeight = canvas.height = biomeImg.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(biomeImg, 0, 0);
+            biomeData = ctx.getImageData(0, 0, biomeWidth, biomeHeight).data;
+        };
+
+        // 3D 좌표 -> 텍스처 UV 좌표 (0~1) 변환
+        function getUV(pos) {
+            const n = pos.clone().normalize();
+            let u = 0.5 + Math.atan2(n.z, n.x) / (2 * Math.PI);
+            let v = 0.5 - Math.asin(n.y) / Math.PI;
+            return { u, v };
+        }
+
+        // 특정 UV 좌표의 지형 확인 (육지/바다)
+        function isLandAtUV(u, v) {
+            if (!biomeData) return true; // 로딩 전엔 육지로 간주
+            
+            const x = Math.floor(u * (biomeWidth - 1));
+            const y = Math.floor(v * (biomeHeight - 1));
+            const idx = (y * biomeWidth + x) * 4;
+            
+            // Blue > Red + 20 이면 바다
+            return !(biomeData[idx + 2] > biomeData[idx] + 20);
+        }
+
+        function getBiome(pos) {
+            const { u, v } = getUV(pos);
+            return isLandAtUV(u, v) ? 'LAND' : 'OCEAN';
+        }
+
+            // 🟢 [복구 및 수정] 함수 선언부와 바다 체크 로직이 사라졌었습니다!
+            function addTrail(idx, pos) {
+              // 🛑 [신규] 바다 체크: 바다 위라면 발자국도 안 찍고, 경로도 끊어버림
+              if (getBiome(pos) === 'OCEAN') {
+                  players[idx].path = []; // 경로 끊기 (폐곡선 불가)
+                  return; // 발자국 생성 중단
+              }
+
+              const sys = trails[idx];   // ✅ 내부에서 객체 가져오기
+              if (sys.count >= TRAIL_MAX) return;  // ✅ 1011번에 정의된 상수 사용
 
             // 1. 시각적 메쉬 추가 (기존 로직)
             sys.dummy.position.copy(pos);
@@ -1126,9 +1302,10 @@
 
             // 4. 점수 갱신 (기본 이동 점수 + 캡처 시에는 위에서 보너스 이미 추가됨)
             if (!captured) {
-                state.scores[idx === 0 ? 'p1' : 'p2'] += 0.05; // 기본 점수는 낮춤
+                const territoryKey = idx === 0 ? 'player1' : 'player2';
+                gameState[territoryKey].territory += 0.05;
             }
-            updateUI();
+            updateStats(); // 또는 영역 업데이트 로직 추가
         }
 
         // ==========================================
@@ -1226,6 +1403,7 @@
         // GAME LOGIC
         // ==========================================
         function switchTurn() {
+            gameState.isFollowing = true; // 🟢 [추가] 턴이 바뀌면 추적 활성화
             gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
             gameState.turn++;
             playSound('turn');
@@ -1303,30 +1481,25 @@
             const deltaY = currentY - startY;
             
             const player = players[gameState.currentPlayer - 1];
-            // 1. 표면 법선 벡터 (지구 중심 -> 플레이어)
             const surfaceNormal = player.mesh.position.clone().normalize();
             
-            // 2. 카메라가 보는 방향
-            const camDir = new THREE.Vector3();
-            camera.getWorldDirection(camDir);
+            // 1. 카메라의 현재 기준축(Right, Up) 가져오기
+            const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+            const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
             
-            // 3. 화면 기준 '오른쪽(Right)' 벡터 (카메라 방향 x 법선)
-            const screenRight = new THREE.Vector3()
-                .crossVectors(camDir, surfaceNormal)
-                .normalize();
+            // 2. 화면 드래그 방향의 정반대(180도) 힘 벡터 생성
+            // 마우스 우측 이동(+X) -> 힘 좌측(-camRight)
+            // 마우스 하단 이동(+Y) -> 힘 상단(+camUp)
+            const forceVector = new THREE.Vector3()
+                .addScaledVector(camRight, -deltaX)
+                .addScaledVector(camUp, deltaY);
                 
-            // 4. 화면 기준 '위쪽(Up)' 벡터 (법선 x 화면 오른쪽)
-            const screenUp = new THREE.Vector3()
-                .crossVectors(surfaceNormal, screenRight)
-                .normalize();
+            // 3. 지구 표면(접평면)에 투영 (Project onto tangent plane)
+            // 공이 하늘로 솟구치지 않고 표면을 따라가도록 보정
+            // v_proj = v - (v . n) * n
+            forceVector.sub(surfaceNormal.multiplyScalar(forceVector.dot(surfaceNormal)));
             
-            // 5. 반대 방향 힘 적용 (화면 좌표계: 아래가 +Y, 오른쪽이 +X)
-            // 아래로 당김(+Y) -> 화면 위쪽(ScreenUp)으로 발사
-            // 오른쪽으로 당김(+X) -> 화면 왼쪽(-ScreenRight)으로 발사
-            const forceDir = new THREE.Vector3()
-                .addScaledVector(screenRight, -deltaX) 
-                .addScaledVector(screenUp, deltaY)     
-                .normalize();
+            const forceDir = forceVector.normalize();
                 
             return { forceDir, deltaX, deltaY };
         }
@@ -1445,6 +1618,7 @@
             
             const player = players[gameState.currentPlayer - 1];
             player.body.applyImpulse(impulse, player.body.position);
+            gameState.isFollowing = true; // 🟢 [추가] 발사 순간부터 미사일 추적 시작
             playSound('shoot'); // [추가됨] 발사 사운드
             
             gameState.hasShot = true;
@@ -1585,8 +1759,20 @@
         controls.maxDistance = 18;  // Closer maximum
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.addEventListener('start', () => { gameState.isRotating = true; });
-        controls.addEventListener('end', () => { gameState.isRotating = false; });
+        controls.addEventListener('start', () => { 
+            gameState.isRotating = true;
+            gameState.isFollowing = false; // 🟢 드래그 시작 시 추적 모드 해제 (자유 시점)
+        });
+        
+        controls.addEventListener('end', () => { 
+            gameState.isRotating = false; 
+            // 드래그가 끝나도 isFollowing을 true로 돌리지 않음 (보고 싶은 곳 계속 보기 위해)
+        });
+
+        // 🟢 [신규] 더블 클릭 시 다시 내 캐릭터 추적
+        window.addEventListener('dblclick', () => {
+            gameState.isFollowing = true;
+        });
 
         // ==========================================
         // ANIMATION LOOP
@@ -1658,21 +1844,29 @@
             // 1. 타겟을 항상 지구 중심으로 고정 (지구가 제자리에서 도는 느낌)
             controls.target.set(0, 0, 0);
 
-            // 2. 자동 추적 (사용자가 화면을 돌리지 않을 때만)
-            if (!gameState.isRotating) {
-                const activePlayer = players[gameState.currentPlayer - 1];
-                
-                // 플레이어의 머리 위(상공) 위치 계산
-                const upVec = activePlayer.mesh.position.clone().normalize();
-                
-                // 현재 줌 거리 유지하면서 이동
-                const currentDist = camera.position.distanceTo(new THREE.Vector3(0,0,0));
-                const targetPos = upVec.multiplyScalar(currentDist);
-                
-                // 부드럽게 이동 (발사 중엔 조금 더 빠르게)
-                const lerpSpeed = gameState.hasShot ? 0.1 : 0.05;
-                camera.position.lerp(targetPos, lerpSpeed);
-            }
+            // 2. 카메라 추적 로직 (Follow Logic)
+            if (gameState.isFollowing && !gameState.isRotating) {
+    const activePlayer = players[gameState.currentPlayer - 1];
+    const upVec = activePlayer.mesh.position.clone().normalize();
+    const speed = activePlayer.body.velocity.length();
+    
+    // 🆕 상태에 따른 줌 레벨
+    let targetDist;
+    if (speed > 2) {
+        // 빠르게 움직일 때: 멀리서 (전체 보기)
+        targetDist = 18;
+    } else if (speed > 0.5) {
+        // 중간 속도: 중간 거리
+        targetDist = 12;
+    } else {
+        // 정지/조준 중: 가까이
+        targetDist = 8;
+    }
+    
+    const targetPos = upVec.multiplyScalar(targetDist);
+    const lerpSpeed = 0.06; // 부드러운 전환
+    camera.position.lerp(targetPos, lerpSpeed);
+}
             
             controls.update();
             renderer.render(scene, camera);
