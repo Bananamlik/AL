@@ -761,6 +761,7 @@
             },
             
             collisions: 0,
+            isRotating: false, // 🟢 [여기 추가] 카메라 회전 상태 확인용 플래그
             
             settings: {
                 soundEnabled: true,
@@ -1301,29 +1302,26 @@
             const deltaY = currentY - startY;
             
             const player = players[gameState.currentPlayer - 1];
-            // 플레이어 위치에서의 법선 벡터 (지구 중심 -> 플레이어 방향)
+            // 1. 표면 법선 벡터 (지구 중심 -> 플레이어)
             const surfaceNormal = player.mesh.position.clone().normalize();
             
-            // 1. 카메라가 보고 있는 방향(CamDir) 가져오기
+            // 2. 카메라가 보는 방향
             const camDir = new THREE.Vector3();
             camera.getWorldDirection(camDir);
             
-            // 2. 화면 기준 '오른쪽(Right)' 벡터 계산 (CamDir x SurfaceNormal)
+            // 3. 화면 기준 '오른쪽(Right)' 벡터 (카메라 방향 x 법선)
             const screenRight = new THREE.Vector3()
                 .crossVectors(camDir, surfaceNormal)
                 .normalize();
                 
-            // 3. 화면 기준 '위쪽(Up)' 벡터 계산 (SurfaceNormal x ScreenRight)
-            // (주의: 순서에 따라 앞/뒤가 바뀌므로 180도 반대 구현을 위해 조정)
+            // 4. 화면 기준 '위쪽(Up)' 벡터 (법선 x 화면 오른쪽)
             const screenUp = new THREE.Vector3()
                 .crossVectors(surfaceNormal, screenRight)
                 .normalize();
             
-            // 4. 슬링샷 로직 (당긴 반대 방향으로 힘 작용)
-            // 마우스 오른쪽 이동(+deltaX) -> 힘은 왼쪽(-screenRight)
-            // 마우스 아래 이동(+deltaY)   -> 힘은 위쪽(+screenUp)
-            // (*화면 좌표계에서 Y축은 아래가 +이므로, 아래로 당기면 화면상 위쪽인 screenUp 방향으로 쏴야 함)
-            
+            // 5. 반대 방향 힘 적용 (화면 좌표계: 아래가 +Y, 오른쪽이 +X)
+            // 아래로 당김(+Y) -> 화면 위쪽(ScreenUp)으로 발사
+            // 오른쪽으로 당김(+X) -> 화면 왼쪽(-ScreenRight)으로 발사
             const forceDir = new THREE.Vector3()
                 .addScaledVector(screenRight, -deltaX) 
                 .addScaledVector(screenUp, deltaY)     
@@ -1586,6 +1584,8 @@
         controls.maxDistance = 18;  // Closer maximum
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
+        controls.addEventListener('start', () => { gameState.isRotating = true; });
+        controls.addEventListener('end', () => { gameState.isRotating = false; });
 
         // ==========================================
         // ANIMATION LOOP
@@ -1653,15 +1653,27 @@
                 aimGroup.position.copy(player.mesh.position);
             }
             
-            // [추가] 카메라 추적 시스템 (Camera Follow System)
-            // 현재 턴인 플레이어의 공 위치를 가져옴
-            const activePlayer = players[gameState.currentPlayer - 1];
+            // [수정] 위성 카메라 추적 (Satellite View)
+            // 1. 타겟을 항상 지구 중심으로 고정 (지구가 제자리에서 도는 느낌)
+            controls.target.set(0, 0, 0);
+
+            // 2. 자동 추적 (사용자가 화면을 돌리지 않을 때만)
+            if (!gameState.isRotating) {
+                const activePlayer = players[gameState.currentPlayer - 1];
+                
+                // 플레이어의 머리 위(상공) 위치 계산
+                const upVec = activePlayer.mesh.position.clone().normalize();
+                
+                // 현재 줌 거리 유지하면서 이동
+                const currentDist = camera.position.distanceTo(new THREE.Vector3(0,0,0));
+                const targetPos = upVec.multiplyScalar(currentDist);
+                
+                // 부드럽게 이동 (발사 중엔 조금 더 빠르게)
+                const lerpSpeed = gameState.hasShot ? 0.1 : 0.05;
+                camera.position.lerp(targetPos, lerpSpeed);
+            }
             
-            // OrbitControls의 타겟(바라보는 점)을 플레이어 위치로 부드럽게 이동 (Lerp)
-            // 0.05 수치는 따라가는 속도 (낮을수록 부드럽고 느림)
-            controls.target.lerp(activePlayer.mesh.position, 0.05);
-            
-            controls.update(); // 업데이트 필수
+            controls.update();
             renderer.render(scene, camera);
         }
 
