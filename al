@@ -1101,9 +1101,9 @@
         const trail2 = createTrailSystem(0x5352ED);
         const trails = [trail1, trail2];
 
-        function addTrail(idx, pos) {
-            const sys = trails[idx];
+        function addTrail(sys, pos) {  // 인덱스 대신 객체를 받도록 변경
             if (sys.count >= CONFIG.trailMax) return;
+            // trails[idx] 제거하고 sys 직접 사용
 
             // 1. 시각적 메쉬 추가 (기존 로직)
             sys.dummy.position.copy(pos);
@@ -1623,7 +1623,7 @@
                     
                     if (dist > CONFIG.trailSpacing) {
                         const trailSystem = idx === 0 ? trail1 : trail2;
-                        addTrail(trailSystem, currentPos);
+                        addTrail(idx, currentPos);  // 객체 대신 인덱스 전달
                         player.lastTrailPos.copy(currentPos);
                         
                         if (idx === 0) {
