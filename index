@@ -38,7 +38,7 @@
             overflow: hidden;
             user-select: none;
             font-family: var(--font-body);
-            background: radial-gradient(ellipse at top, #FFE5EC 0%, #C7F0FF 100%);
+            background: #0a0a1e;
             position: relative;
             touch-action: manipulation;
         }
@@ -508,7 +508,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(135deg, #FFE5EC 0%, #C7F0FF 100%);
+            background: #0a0a1e;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -520,13 +520,14 @@
         #loading.hidden {
             opacity: 0;
             pointer-events: none;
+            /* display:none을 CSS에 두면 opacity transition이 동작하지 않음 → JS에서 지연 처리 */
         }
         
         .spinner {
             width: 60px;
             height: 60px;
-            border: 6px solid rgba(255, 255, 255, 0.3);
-            border-top-color: var(--player1-color);
+            border: 6px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #FF4757;
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin-bottom: 20px;
@@ -539,9 +540,85 @@
         .loading-text {
             font-family: var(--font-display);
             font-size: 24px;
-            color: var(--text-dark);
+            color: white;
         }
         
+        /* ================================
+           TITLE SCREEN BUTTONS (H-3)
+        ================================ */
+        .mode-btn {
+            padding: 9px 20px;
+            border-radius: 30px;
+            border: 1.5px solid rgba(255,255,255,0.4);
+            font-family: 'Fredoka One', cursive;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: white;
+            background: rgba(255,255,255,0.15);
+        }
+        .mode-btn:hover {
+            transform: translateY(-2px);
+            background: rgba(255,255,255,0.25);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        #btn-play:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 0 #C92A2A, 0 14px 30px rgba(255,71,87,0.5) !important;
+        }
+        #btn-play:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #C92A2A !important;
+        }
+
+        /* ================================
+           TERRITORY PROGRESS BAR
+        ================================ */
+        .territory-bar-wrap {
+            width: 120px;
+            height: 5px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 3px;
+        }
+        .territory-bar {
+            height: 100%;
+            width: 0%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+        .territory-bar.p1 { background: var(--player1-color); }
+        .territory-bar.p2 { background: var(--player2-color); }
+
+        /* 잉크 게이지 */
+        .ink-bar-wrap {
+            width: 120px; height: 4px;
+            background: rgba(0,0,0,0.12);
+            border-radius: 3px; overflow: hidden; margin-top: 3px;
+        }
+        .ink-bar {
+            height: 100%; width: 100%;
+            border-radius: 3px;
+            transition: width 0.2s ease, background 0.3s;
+        }
+        .ink-bar.p1 { background: linear-gradient(90deg,#FF4757,#FFB347); }
+        .ink-bar.p2 { background: linear-gradient(90deg,#5352ED,#00C8FF); }
+        .ink-label { font-size: 10px; color: var(--text-light); font-weight: 600; margin-top:2px; }
+
+        /* ================================
+           HELP MODAL ROW
+        ================================ */
+        .help-row {
+            display: flex;
+            gap: 10px;
+            font-size: 13px;
+            color: #2D3436;
+            line-height: 1.5;
+            margin-bottom: 10px;
+            align-items: flex-start;
+        }
+
         /* ================================
            RESPONSIVE
         ================================ */
@@ -562,7 +639,6 @@
             }
         }
     </style>
-    
     <script type="importmap">
         {
             "imports": {
@@ -574,6 +650,62 @@
     </script>
 </head>
 <body>
+    <!-- Title / Mode Selection Screen (H-3) -->
+    <div id="title-screen" style="
+        position: fixed; top:0; left:0; width:100%; height:100%;
+        background: linear-gradient(135deg, rgba(255,71,87,0.45) 0%, rgba(83,82,237,0.45) 100%);
+        z-index: 500;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 0;
+        font-family: 'Fredoka One', cursive;
+    ">
+        <!-- 중앙 카드 -->
+        <div style="
+            background: rgba(255,255,255,0.10);
+            border: 1.5px solid rgba(255,255,255,0.30);
+            border-radius: 32px;
+            padding: 44px 56px 40px;
+            display: flex; flex-direction: column;
+            align-items: center; gap: 22px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+        ">
+            <div style="font-size:64px; line-height:1;">🌍</div>
+            <div style="font-size:46px; color: white; text-shadow: 0 3px 12px rgba(0,0,0,0.4); letter-spacing:1px;">Globe Striker</div>
+            <div style="font-size:13px; color:rgba(255,255,255,0.8); font-family:'DM Sans',sans-serif; font-weight:600; letter-spacing:3px; text-transform:uppercase;">Territory Battle</div>
+
+            <!-- 게임 시간 선택 -->
+            <div style="display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:4px;">
+                <div style="font-size:13px; color:rgba(255,255,255,0.7); font-family:'DM Sans',sans-serif; letter-spacing:1px; text-transform:uppercase;">Game Duration</div>
+                <div style="display:flex; gap:10px;">
+                    <button class="mode-btn" id="dur-1" onclick="setDuration(60)">1 min</button>
+                    <button class="mode-btn" id="dur-3" onclick="setDuration(180)" style="background:rgba(255,255,255,0.9);color:#FF4757;border-color:white;">3 min</button>
+                    <button class="mode-btn" id="dur-5" onclick="setDuration(300)">5 min</button>
+                </div>
+            </div>
+
+            <!-- 플레이 버튼 -->
+            <button id="btn-play" onclick="startFromTitle()" style="
+                margin-top:4px;
+                background: linear-gradient(135deg, #FF4757, #E84057);
+                color: white;
+                border: none;
+                padding: 18px 60px;
+                border-radius: 50px;
+                font-family: 'Fredoka One', cursive;
+                font-size: 22px;
+                cursor: pointer;
+                box-shadow: 0 5px 0 #C92A2A, 0 10px 25px rgba(255,71,87,0.5);
+                transition: all 0.2s;
+                letter-spacing: 0.5px;
+            ">▶ Play (2P Local)</button>
+
+            <div style="font-size:12px; color:rgba(255,255,255,0.55); font-family:'DM Sans',sans-serif; text-align:center; max-width:280px; line-height:1.5;">
+                육지 위에 폐곡선을 그려 영역을 점령하세요!
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Screen -->
     <div id="loading">
         <div class="spinner"></div>
@@ -586,7 +718,14 @@
             <div class="player-avatar p1 active" id="avatar-p1">🔴</div>
             <div class="player-stats">
                 <div class="player-name">Player 1</div>
-                <div class="player-territory">Territory: <span id="territory-p1">0%</span></div>
+                <div class="player-territory">Territory: <span id="territory-p1">0.00%</span></div>
+                <div class="territory-bar-wrap">
+                    <div class="territory-bar p1" id="territory-bar-p1"></div>
+                </div>
+                <div class="ink-bar-wrap">
+                    <div class="ink-bar p1" id="ink-bar-p1"></div>
+                </div>
+                <div class="ink-label">🖊️ <span id="ink-p1">100</span></div>
             </div>
         </div>
         
@@ -598,14 +737,21 @@
         <div class="player-info">
             <div class="player-stats" style="text-align: right;">
                 <div class="player-name">Player 2</div>
-                <div class="player-territory">Territory: <span id="territory-p2">0%</span></div>
+                <div class="player-territory">Territory: <span id="territory-p2">0.00%</span></div>
+                <div class="territory-bar-wrap">
+                    <div class="territory-bar p2" id="territory-bar-p2"></div>
+                </div>
+                <div class="ink-bar-wrap" style="margin-left:auto;">
+                    <div class="ink-bar p2" id="ink-bar-p2"></div>
+                </div>
+                <div class="ink-label" style="text-align:right;">🖊️ <span id="ink-p2">100</span></div>
             </div>
             <div class="player-avatar p2" id="avatar-p2">🔵</div>
         </div>
     </div>
     
     <!-- Stats Panel -->
-    <div id="stats-panel" class="side-panel">
+    <div id="stats-panel" class="side-panel" style="display:none;">
         <div class="panel-title">📊 Game Stats</div>
         <div class="stat-item">
             <span class="stat-label">Turn</span>
@@ -618,6 +764,14 @@
         <div class="stat-item">
             <span class="stat-label">P2 Shots</span>
             <span class="stat-value" id="stat-p2-shots">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">P1 Loops 🔄</span>
+            <span class="stat-value" id="stat-p1-loops" style="color:var(--player1-color)">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">P2 Loops 🔄</span>
+            <span class="stat-value" id="stat-p2-loops" style="color:var(--player2-color)">0</span>
         </div>
         <div class="stat-item">
             <span class="stat-label">P1 Distance</span>
@@ -634,7 +788,7 @@
     </div>
     
     <!-- Options Panel -->
-    <div id="options-panel" class="side-panel">
+    <div id="options-panel" class="side-panel" style="display:none;">
         <div class="panel-title">⚙️ Settings</div>
         
         <div class="option-row">
@@ -683,6 +837,24 @@
         <button class="control-btn" id="btn-help" title="Help">❓</button>
     </div>
     
+    <!-- Turn Countdown (H-1) -->
+    <div id="turn-countdown" style="
+        position: fixed; top: 80px; left: 50%;
+        transform: translateX(-50%);
+        font-family: 'Fredoka One', cursive;
+        font-size: 28px;
+        background: rgba(255,255,255,0.9);
+        backdrop-filter: blur(6px);
+        border-radius: 50%;
+        width: 54px; height: 54px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 95;
+        transition: color 0.3s, transform 0.2s;
+    ">30</div>
+    
     <!-- Turn Indicator -->
     <div id="turn-indicator">
         <div class="turn-text" id="turn-text">Player 1's Turn</div>
@@ -706,6 +878,36 @@
             <button class="restart-btn" onclick="location.reload()">Play Again</button>
         </div>
     </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" style="
+        display:none; position:fixed; inset:0;
+        background:rgba(0,0,0,0.8); z-index:600;
+        align-items:center; justify-content:center;
+    ">
+        <div style="
+            background:white; border-radius:24px; padding:36px 40px;
+            max-width:420px; width:90%; font-family:'DM Sans',sans-serif;
+            animation: slideUp 0.4s cubic-bezier(0.68,-0.55,0.265,1.55);
+        ">
+            <div style="font-family:'Fredoka One',cursive; font-size:26px; color:#2D3436; margin-bottom:20px; text-align:center;">
+                🌍 Globe Striker — 규칙
+            </div>
+            <div class="help-row">🖱️ <b>공을 드래그</b>해서 발사 방향과 세기를 조준합니다 (당긴 반대 방향으로 발사)</div>
+            <div class="help-row">🗺️ 공이 <b>육지 위</b>를 지날 때만 경로(트레일)가 생깁니다. 바다에선 경로가 초기화됩니다.</div>
+            <div class="help-row">🔄 자신의 트레일로 <b>폐곡선을 완성</b>하면 그 안의 육지를 모두 점령합니다!</div>
+            <div class="help-row">⚔️ 상대 영역 위로 폐곡선을 그리면 <b>완전 탈취</b>됩니다</div>
+            <div class="help-row">🌀 <b>코리올리 효과</b>로 투사체가 지구 자전에 의해 휩니다 (고위도 = 강함)</div>
+            <div class="help-row">⏱️ 제한 시간 종료 시 <b>가장 넓은 영역</b>을 가진 플레이어 우승</div>
+            <div class="help-row">💡 더블클릭으로 카메라가 현재 플레이어를 다시 따라갑니다</div>
+            <button onclick="document.getElementById('help-modal').style.display='none'" style="
+                margin-top:20px; width:100%; padding:14px;
+                background:linear-gradient(135deg,#FF4757,#E84057);
+                color:white; border:none; border-radius:16px;
+                font-family:'Fredoka One',cursive; font-size:18px; cursor:pointer;
+            ">확인</button>
+        </div>
+    </div>
     
     <script type="module">
         import * as THREE from 'three';
@@ -716,24 +918,31 @@
         // GAME CONFIGURATION
         // ==========================================
         const CONFIG = {
-            earthRadius: 4,
-            playerRadius: 0.12,
-            gravity: 120,        // 60 -> 120 (중력 2배: 묵직하게 바닥에 붙음)
-            mass: 5,
-            damping: 0.75,       // 0.4 -> 0.75 (마찰력 대폭 증가: 미끄러짐 방지)
-            shootForce: 135,     // 180 -> 135 (힘 하향: 제어 가능한 수준으로 변경)
-            coriolisFactor: 0.3,
-    
-    // Game Rules
-    gameDuration: 180,
-    turnTimeLimit: 30,
-    
-    // Visual
-    trailSpacing: 0.25,
-    trailSpeedThreshold: 0.3,
-    captureRadius: 0.5,
-    minLoopLength: 10
-};
+            earthRadius:       4,
+            playerRadius:      0.12,
+            gravity:           120,      // 구면 중력 크기
+            mass:              5,
+            damping:           0.55,     // 0.75→0.55: 이동 범위 확대 (코리올리 체감)
+            shootForce:        135,
+            coriolisFactor:    3.5,      // 0.3→3.5: 플레이어가 체감 가능한 수준
+
+            // Game Rules
+            gameDuration:      180,
+            turnTimeLimit:     30,
+
+            // Visual / Logic
+            trailSpacing:      0.08,
+            trailSpeedThreshold: 0.3,
+            captureRadius:     1.0,
+            minLoopLength:     8,
+            LAND_THRESHOLD:    25,
+
+            // ── 잉크 시스템 ──────────────────────────────
+            inkMax:            100,   // 최대 잉크량
+            inkLandCost:       0.4,   // 육지 트레일 1점 소모량
+            inkOceanPenalty:   20,    // 바다 진입 시 1회 페널티
+            inkRechargePerTurn: 15,   // 턴 종료 시 회복량
+        };
 
         // ==========================================
         // GAME STATE
@@ -744,72 +953,65 @@
             timeRemaining: CONFIG.gameDuration,
             isPlanning: true,
             hasShot: false,
-            
-            player1: {
-                territory: 0,
-                shots: 0,
-                distance: 0,
-                trails: []
-            },
-            
-            player2: {
-                territory: 0,
-                shots: 0,
-                distance: 0,
-                trails: []
-            },
-            
+            player1: { territory: 0, shots: 0, distance: 0, loops: 0, ink: 100 },
+            player2: { territory: 0, shots: 0, distance: 0, loops: 0, ink: 100 },
             collisions: 0,
-            isRotating: false, // 🟢 [여기 추가] 카메라 회전 상태 확인용 플래그
+            isRotating: false,
             isFollowing: true,
-            
-            settings: {
-                soundEnabled: true,
-                volume: 0.7,
-                cameraRotation: true,
-                showTrails: true
-            }
+            settings: { soundEnabled: true, volume: 0.7, cameraRotation: true, showTrails: true }
         };
 
         // ==========================================
-        // SOUND SYSTEM (Synth)
+        // SOUND SYSTEM
         // ==========================================
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
+
         function playSound(type) {
             if (!gameState.settings.soundEnabled) return;
             if (audioCtx.state === 'suspended') audioCtx.resume();
-
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain);
             gain.connect(audioCtx.destination);
             const now = audioCtx.currentTime;
 
-            if (type === 'charge') { // 당길 때 (위잉-)
+            if (type === 'charge') {
                 osc.type = 'sine';
                 osc.frequency.setValueAtTime(200, now);
                 osc.frequency.linearRampToValueAtTime(400, now + 0.1);
                 gain.gain.setValueAtTime(0.05, now);
                 gain.gain.linearRampToValueAtTime(0, now + 0.1);
-                osc.start(now);
-                osc.stop(now + 0.1);
-            } else if (type === 'shoot') { // 발사! (퉁!)
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'shoot') {
                 osc.type = 'triangle';
                 osc.frequency.setValueAtTime(300, now);
                 osc.frequency.exponentialRampToValueAtTime(50, now + 0.2);
                 gain.gain.setValueAtTime(0.3, now);
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-                osc.start(now);
-                osc.stop(now + 0.2);
-            } else if (type === 'turn') { // 턴 교체 (띠링)
+                osc.start(now); osc.stop(now + 0.2);
+            } else if (type === 'turn') {
                 osc.type = 'sine';
                 osc.frequency.setValueAtTime(600, now);
                 osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
                 gain.gain.setValueAtTime(0.1, now);
                 gain.gain.linearRampToValueAtTime(0, now + 0.3);
-                osc.start(now);
-                osc.stop(now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'capture') {
+                // 영역 점령 성공음: 상승 화음
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.35);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now); osc.stop(now + 0.5);
+            } else if (type === 'steal') {
+                // 영역 탈취음: 강한 하강
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(660, now);
+                osc.frequency.exponentialRampToValueAtTime(220, now + 0.4);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
             }
         }
 
@@ -817,34 +1019,38 @@
         // SCENE SETUP
         // ==========================================
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0xffffff, 0.015);
+        scene.background = new THREE.Color(0x0a0a1e);
 
-        const camera = new THREE.PerspectiveCamera(
-            50,  // Wider FOV
-            window.innerWidth / window.innerHeight,
-            0.1,
-            1000
-        );
-        // Closer camera for better view (자신의 공 위주로 크게)
-        camera.position.set(0, 5, 10);
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 12);
 
-        const renderer = new THREE.WebGLRenderer({ 
-            antialias: true, 
-            alpha: true 
-        });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        document.body.appendChild(renderer.domElement);
+
+        const canvas = renderer.domElement;
+        canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;display:block;';
+        document.body.insertBefore(canvas, document.body.firstChild);
+
+        // ==========================================
+        // STARFIELD
+        // ==========================================
+        (function addStars() {
+            const geo = new THREE.BufferGeometry();
+            const n = 2000;
+            const pos = new Float32Array(n * 3);
+            for (let i = 0; i < n * 3; i++) pos[i] = (Math.random() - 0.5) * 400;
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.4, sizeAttenuation: true })));
+        })();
 
         // ==========================================
         // LIGHTING
         // ==========================================
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
-        scene.add(ambientLight);
-
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        directionalLight.position.set(5, 10, 7);
-        scene.add(directionalLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(5, 10, 7);
+        scene.add(dirLight);
 
         // ==========================================
         // PHYSICS WORLD
@@ -855,12 +1061,10 @@
         world.solver.iterations = 20;
 
         const physicsMaterial = new CANNON.Material('physics');
-        const contactMaterial = new CANNON.ContactMaterial(
-            physicsMaterial,
-            physicsMaterial,
+        world.addContactMaterial(new CANNON.ContactMaterial(
+            physicsMaterial, physicsMaterial,
             { friction: 0.3, restitution: 0.2 }
-        );
-        world.addContactMaterial(contactMaterial);
+        ));
 
         // ==========================================
         // EARTH
@@ -872,74 +1076,368 @@
         });
         world.addBody(earthBody);
 
-        const textureLoader = new THREE.TextureLoader();
-        const earthTexture = textureLoader.load(
+        const earthTexture = new THREE.TextureLoader().load(
             'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg'
         );
 
         const earthMaterial = new THREE.ShaderMaterial({
-            uniforms: {
-                map: { value: earthTexture }
-            },
-            vertexShader: `
-                varying vec2 vUv;
-                void main() {
-                    vUv = uv;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                }
-            `,
+            uniforms: { map: { value: earthTexture } },
+            vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
             fragmentShader: `
-                uniform sampler2D map;
-                varying vec2 vUv;
-                
-                void main() {
-                    vec4 texColor = texture2D(map, vUv);
+                uniform sampler2D map; varying vec2 vUv;
+                void main(){
+                    vec4 t = texture2D(map, vUv);
+                    // 바다: 기본 하늘색
                     vec3 color = vec3(0.4, 0.7, 1.0);
-                    
-                    float brightness = texColor.r + texColor.g + texColor.b;
-                    
-                    if (texColor.b <= texColor.r + 0.1) {
-                        if (brightness > 2.1) {
-                            color = vec3(0.94, 0.96, 0.97);
-                        } else if (texColor.r > texColor.g) {
-                            color = vec3(1.0, 0.85, 0.56);
-                        } else {
-                            color = vec3(0.45, 0.82, 0.49);
-                        }
+                    float br = t.r + t.g + t.b;
+                    // 육지 판별: specular map 기준 사용 (B > R + 0.098 → 바다)
+                    if(t.b <= t.r + 0.098){
+                        if(br > 2.1)      color = vec3(0.94, 0.96, 0.97); // 설원
+                        else if(t.r>t.g)  color = vec3(1.0,  0.85, 0.56); // 사막/건조지
+                        else              color = vec3(0.45, 0.82, 0.49); // 숲/초원
                     }
-                    
                     gl_FragColor = vec4(color, 1.0);
                 }
             `
         });
 
-        const earthMesh = new THREE.Mesh(
-            new THREE.SphereGeometry(CONFIG.earthRadius, 64, 64),
-            earthMaterial
-        );
+        const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(CONFIG.earthRadius, 64, 64), earthMaterial);
         scene.add(earthMesh);
-
-        const outlineMesh = new THREE.Mesh(
+        // v2 스타일: 어두운 외곽선 (BackSide 검정 구)
+        earthMesh.add(new THREE.Mesh(
             new THREE.SphereGeometry(CONFIG.earthRadius + 0.08, 64, 64),
-            new THREE.MeshBasicMaterial({
-                color: 0x2D3436,
-                side: THREE.BackSide
-            })
-        );
-        earthMesh.add(outlineMesh);
+            new THREE.MeshBasicMaterial({ color: 0x2D3436, side: THREE.BackSide })
+        ));
+
+        // ==========================================
+        // TERRITORY OVERLAY SYSTEM  ★ 핵심 수정 ★
+        // ==========================================
+        // ownershipMap: 각 텍스처 픽셀의 소유자 (0=없음, 1=P1, 2=P2)
+        let biomeData = null, biomeWidth = 0, biomeHeight = 0;
+        let ownershipMap = null;
+        let totalLandPixels = 0;
+        const playerLandPixels = [0, 0];
+
+        // 오버레이 캔버스 — 지구 표면에 영구 합성
+        let overlayCanvas, overlayCtx, overlayTexture, overlayMesh;
+
+        // 플레이어별 색상 (fill=영역 반투명, border=외곽선)
+        const TERR_COLOR = [
+            { r: 255, g: 71,  b: 87,  a: 160 },  // P1: 빨강
+            { r: 83,  g: 82,  b: 237, a: 160 },  // P2: 파랑
+        ];
+
+        // specular map: 밝을수록 바다(반사율↑), 어두울수록 육지(반사율↓)
+        // 임계값 80: 0~255 중 어두운 쪽 = 육지
+        function isLandPixelSingle(gx, gy) {
+            if (!biomeData) return true;
+            if (gx < 0 || gx >= biomeWidth || gy < 0 || gy >= biomeHeight) return false;
+            const idx = (gy * biomeWidth + gx) * 4;
+            const brightness = (biomeData[idx] + biomeData[idx+1] + biomeData[idx+2]) / 3;
+            return brightness < 80; // 어두움 = 육지
+        }
+
+        // 3×3 다수결 (트레일/루프 판별용)
+        function isLandPixel(gx, gy) {
+            if (!biomeData) return true;
+            let landCount = 0, total = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const x = gx + dx, y = gy + dy;
+                    if (x < 0 || x >= biomeWidth || y < 0 || y >= biomeHeight) continue;
+                    const idx = (y * biomeWidth + x) * 4;
+                    total++;
+                    const brightness = (biomeData[idx] + biomeData[idx+1] + biomeData[idx+2]) / 3;
+                    if (brightness < 80) landCount++; // 어두움 = 육지
+                }
+            }
+            return landCount > total / 2;
+        }
+
+        // UV 좌표 → 픽셀 판별 (addTrail / getBiome 용)
+        function isLandAtUV(u, v) {
+            if (!biomeData) return true;
+            const gx = Math.floor(u * (biomeWidth - 1));
+            const gy = Math.floor(v * (biomeHeight - 1));
+            return isLandPixel(gx, gy);
+        }
+
+        // ★ UV 좌표 변환 (Three.js SphereGeometry와 정확히 일치)
+        // SphereGeometry: x = -cos(u*2π)*sin(θ), z = sin(u*2π)*sin(θ)
+        // ∴ u = atan2(n.z, -n.x) / (2π), [0,1] 범위로 정규화
+        // 기존의 atan2(n.z, n.x)는 수평 미러링 버그가 있었음
+        function getUV(pos) {
+            const n = pos.clone().normalize();
+            const u = ((Math.atan2(n.z, -n.x) / (2 * Math.PI)) + 1.0) % 1.0;
+            const v = 0.5 - Math.asin(Math.max(-1, Math.min(1, n.y))) / Math.PI;
+            return { u, v };
+        }
+
+        function getBiome(pos) {
+            const { u, v } = getUV(pos);
+            return isLandAtUV(u, v) ? 'LAND' : 'OCEAN';
+        }
+
+        // 오버레이 초기화 — biome 로드 후 호출
+        function initOverlay() {
+            overlayCanvas = document.createElement('canvas');
+            overlayCanvas.width  = biomeWidth;
+            overlayCanvas.height = biomeHeight;
+            overlayCtx = overlayCanvas.getContext('2d', { willReadFrequently: true });
+
+            // 소유권 맵 초기화
+            ownershipMap = new Uint8Array(biomeWidth * biomeHeight);
+
+            // 전체 육지 픽셀 수 — 비동기로 정확히 계산 (블로킹 없음)
+            // 계산 완료 전까지 totalLandPixels=0 → 점수 표시 안 됨 (오류보다 낫음)
+            totalLandPixels = 0;
+            (function countLandAsync() {
+                const CHUNK = 80000;
+                let i = 0, count = 0;
+                function step() {
+                    const end = Math.min(i + CHUNK, biomeWidth * biomeHeight);
+                    for (; i < end; i++) {
+                        const px = i % biomeWidth, py = Math.floor(i / biomeWidth);
+                        if (isLandPixelSingle(px, py)) count++;
+                    }
+                    if (i < biomeWidth * biomeHeight) {
+                        requestAnimationFrame(step);
+                    } else {
+                        totalLandPixels = count;
+                        console.log(`[GlobeStriker] totalLandPixels 계산 완료: ${count}`);
+                        updateTerritoryScores();
+                    }
+                }
+                requestAnimationFrame(step);
+            })();
+
+            // 오버레이 구 (지구 표면보다 살짝 위)
+            overlayTexture = new THREE.CanvasTexture(overlayCanvas);
+            overlayMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(CONFIG.earthRadius + 0.012, 64, 64),
+                new THREE.MeshBasicMaterial({
+                    map: overlayTexture,
+                    transparent: true,
+                    depthWrite: false,
+                    opacity: 1.0,
+                })
+            );
+            scene.add(overlayMesh);
+        }
+
+        // 외곽선 감지 — 이웃 픽셀과 소유자가 다르면 border (M-3)
+        function isBorderPixel(oi) {
+            const gx = oi % biomeWidth, gy = Math.floor(oi / biomeWidth);
+            const owner = ownershipMap[oi];
+            for (const [dx, dy] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+                const nx = gx + dx, ny = gy + dy;
+                if (nx < 0 || nx >= biomeWidth || ny < 0 || ny >= biomeHeight) continue;
+                if (ownershipMap[ny * biomeWidth + nx] !== owner) return true;
+            }
+            return false;
+        }
+
+        // C-2: 더티 리전(바운딩 박스)만 재페인트 — 전체 순회 제거
+        function repaintRegion(minX, minY, maxX, maxY) {
+            const w = maxX - minX + 1, h = maxY - minY + 1;
+            const imgData = overlayCtx.getImageData(minX, minY, w, h);
+            const data = imgData.data;
+            for (let ly = 0; ly < h; ly++) {
+                for (let lx = 0; lx < w; lx++) {
+                    const oi = (minY + ly) * biomeWidth + (minX + lx);
+                    const owner = ownershipMap[oi];
+                    const pi = (ly * w + lx) * 4;
+                    if (owner > 0) {
+                        const c = TERR_COLOR[owner - 1];
+                        const border = isBorderPixel(oi);
+                        data[pi]   = c.r;
+                        data[pi+1] = c.g;
+                        data[pi+2] = c.b;
+                        data[pi+3] = border ? 220 : c.a;  // 외곽선 더 불투명
+                    } else {
+                        data[pi+3] = 0;  // 투명
+                    }
+                }
+            }
+            overlayCtx.putImageData(imgData, minX, minY);
+            overlayTexture.needsUpdate = true;
+        }
+
+        // 전체 오버레이 재페인트 (초기화 또는 게임 리셋용)
+        function repaintOverlay() {
+            repaintRegion(0, 0, biomeWidth - 1, biomeHeight - 1);
+        }
+
+        // 영역 점수 갱신 — 항상 같은 기준
+        function updateTerritoryScores() {
+            if (totalLandPixels === 0) return;
+            gameState.player1.territory = playerLandPixels[0] / totalLandPixels * 100;
+            gameState.player2.territory = playerLandPixels[1] / totalLandPixels * 100;
+            const p1pct = gameState.player1.territory;
+            const p2pct = gameState.player2.territory;
+            elements.territoryP1.textContent = `${p1pct.toFixed(2)}%`;
+            elements.territoryP2.textContent = `${p2pct.toFixed(2)}%`;
+            // 진행 바 업데이트 (최대 40%를 100%로 표시 — 실게임에서 40% 이상은 압승)
+            const MAX_DISPLAY = 40;
+            const bar1 = document.getElementById('territory-bar-p1');
+            const bar2 = document.getElementById('territory-bar-p2');
+            if (bar1) bar1.style.width = `${Math.min(100, p1pct / MAX_DISPLAY * 100)}%`;
+            if (bar2) bar2.style.width = `${Math.min(100, p2pct / MAX_DISPLAY * 100)}%`;
+        }
+
+        // C-3: UV 연속성 보정 — 날짜변경선(u≈0↔u≈1) 근처 폴리곤 왜곡 방지
+        function normalizeUVs(uvPoints) {
+            if (uvPoints.length === 0) return uvPoints;
+            const ref = uvPoints[0].u;
+            return uvPoints.map(p => {
+                let u = p.u;
+                if (u - ref >  0.5) u -= 1.0;
+                if (u - ref < -0.5) u += 1.0;
+                return { u, v: p.v };
+            });
+        }
+
+        // ★ 핵심 함수: 폐곡선 영역을 소유권 맵에 반영 + 침해(Rule 5) 처리
+        function createTerritoryArea(points, playerIdx) {
+            if (points.length < 3 || !biomeData || !ownershipMap) return;
+
+            const otherIdx = playerIdx === 0 ? 1 : 0;
+
+            // 1. UV → 픽셀 좌표 변환 (C-3: 날짜변경선 보정 적용) + 바운딩 박스
+            const rawUVs = points.map(p => getUV(p));
+            const normUVs = normalizeUVs(rawUVs);
+            const pixPoints = normUVs.map(({ u, v }) => ({
+                // 날짜변경선 근처에서 u가 [0,1) 밖으로 벗어날 수 있으므로 모듈로 처리
+                x: Math.round(((u % 1.0 + 1.0) % 1.0) * (biomeWidth - 1)),
+                y: Math.round(Math.max(0, Math.min(1, v)) * (biomeHeight - 1))
+            }));
+
+            let minX = biomeWidth, maxX = 0, minY = biomeHeight, maxY = 0;
+            pixPoints.forEach(p => {
+                minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+            });
+            minX = Math.max(0, minX - 1); minY = Math.max(0, minY - 1);
+            maxX = Math.min(biomeWidth - 1, maxX + 1);
+            maxY = Math.min(biomeHeight - 1, maxY + 1);
+            const w = maxX - minX + 1;
+            const h = maxY - minY + 1;
+            if (w <= 0 || h <= 0) return;
+
+            // 2. 마스크 캔버스에 폴리곤 채우기
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = w; maskCanvas.height = h;
+            const maskCtx = maskCanvas.getContext('2d');
+            maskCtx.fillStyle = 'white';
+            maskCtx.beginPath();
+            pixPoints.forEach((p, i) => {
+                const lx = p.x - minX, ly = p.y - minY;
+                if (i === 0) maskCtx.moveTo(lx, ly);
+                else maskCtx.lineTo(lx, ly);
+            });
+            maskCtx.closePath();
+            maskCtx.fill();
+            const maskData = maskCtx.getImageData(0, 0, w, h).data;
+
+            // 3. 픽셀 단위 소유권 갱신
+            let newCapture = 0, stolen = 0;
+            for (let ly = 0; ly < h; ly++) {
+                for (let lx = 0; lx < w; lx++) {
+                    const mi = (ly * w + lx) * 4;
+                    if (maskData[mi] < 128) continue;          // 폴리곤 밖
+
+                    const gx = minX + lx, gy = minY + ly;
+                    if (!isLandPixelSingle(gx, gy)) continue;        // 바다 제외 (정밀 단일 픽셀)
+
+                    const oi   = gy * biomeWidth + gx;
+                    const prev = ownershipMap[oi];
+
+                    if (prev === 0) {
+                        // 미점령 → 신규 획득
+                        ownershipMap[oi] = playerIdx + 1;
+                        playerLandPixels[playerIdx]++;
+                        newCapture++;
+                    } else if (prev === otherIdx + 1) {
+                        // ★ 상대 영역 → 완전 탈취 (규칙: 폐곡면은 상대 영역을 덮어씌울 수 있음)
+                        // v3의 50% 랜덤은 전략성을 저해하므로 제거
+                        ownershipMap[oi] = playerIdx + 1;
+                        playerLandPixels[otherIdx]--;
+                        playerLandPixels[playerIdx]++;
+                        newCapture++;
+                        stolen++;
+                    }
+                    // 자기 영역(prev === playerIdx+1) → 변경 없음 (중복 가산 방지)
+                }
+            }
+
+            if (newCapture <= 0) return;
+
+            // 4. 오버레이 더티 리전 재페인트 (C-2) + 점수 갱신
+            repaintRegion(minX, minY, maxX, maxY);
+            updateTerritoryScores();
+
+            // loops 카운터 증가
+            if (playerIdx === 0) gameState.player1.loops++;
+            else                 gameState.player2.loops++;
+            updateStats();
+
+            // 5. 피드백
+            const pct = (newCapture / totalLandPixels * 100).toFixed(2);
+            const mid = points[Math.floor(points.length / 2)];
+            let msg = `+${pct}%`;
+            if (stolen > 0) {
+                msg = `⚔️ 탈취! +${pct}%  (${(stolen / totalLandPixels * 100).toFixed(2)}% 강탈)`;
+                playSound('steal');
+                // 탈취 시 색상 강조
+                showFloatingText(msg, mid, '#FFD700');
+            } else {
+                playSound('capture');
+                showFloatingText(msg, mid, '#72D27E');
+            }
+        }
+
+        // ==========================================
+        // BIOME TEXTURE LOAD
+        // ==========================================
+        let biomeReady = false, gameReadyCallback = null;
+
+        // ★ biome 판별 전용: specular map 사용
+        // specular map = 바다(밝음/흰색) vs 육지(어두움/검정) → 명도 기준으로 정확한 판별 가능
+        const biomeImg = new Image();
+        biomeImg.crossOrigin = 'Anonymous';
+        biomeImg.src = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_specular_2048.jpg';
+        biomeImg.onload = () => {
+            try {
+                const c = document.createElement('canvas');
+                biomeWidth = c.width = biomeImg.width;
+                biomeHeight = c.height = biomeImg.height;
+                const ctx = c.getContext('2d');
+                ctx.drawImage(biomeImg, 0, 0);
+                biomeData = ctx.getImageData(0, 0, biomeWidth, biomeHeight).data;
+                initOverlay();
+            } catch(e) {
+                console.warn('[GlobeStriker] biome CORS 오류 — 육지/바다 구분 불가:', e);
+            }
+            biomeReady = true;
+            if (gameReadyCallback) { const cb = gameReadyCallback; gameReadyCallback = null; cb(); }
+        };
+        biomeImg.onerror = () => {
+            console.warn('[GlobeStriker] biome 이미지 로드 실패 — 모든 픽셀을 육지로 처리');
+            biomeReady = true;
+            if (gameReadyCallback) { const cb = gameReadyCallback; gameReadyCallback = null; cb(); }
+        };
 
         // ==========================================
         // PLAYERS
         // ==========================================
         const players = [];
-        
         function createPlayer(colorHex, position) {
             const body = new CANNON.Body({
                 mass: CONFIG.mass,
                 shape: new CANNON.Sphere(CONFIG.playerRadius),
                 material: physicsMaterial,
                 linearDamping: CONFIG.damping,
-                angularDamping: 0.5
+                angularDamping: 0.5,
             });
             body.position.copy(position);
             world.addBody(body);
@@ -956,472 +1454,254 @@
             );
             mesh.add(hitBox);
 
-            // path: [[x,y,z], [x,y,z]...] 형태의 좌표 기록용
-            return { body, mesh, hitBox, lastTrailPos: position.clone(), path: [] };
+            return { body, mesh, hitBox,
+                lastTrailPos: new THREE.Vector3(position.x, position.y, position.z),
+                // 세그먼트 기반 경로 (바다 건너 루프 방지)
+                currentSegment: [],   // 현재 진행 중인 육지 세그먼트
+                landSegments:   [],   // 완성된 육지 세그먼트들 (ocean break로 분리됨)
+                shotsFired:     0,    // 발사 횟수 (3발 이상 필요)
+            };
         }
 
-        players.push(createPlayer(
-            0xFF4757,
-            new CANNON.Vec3(0, CONFIG.earthRadius + CONFIG.playerRadius + 0.05, 0)
-        ));
-
-        players.push(createPlayer(
-            0x5352ED,
-            new CANNON.Vec3(0, -(CONFIG.earthRadius + CONFIG.playerRadius + 0.05), 0)
-        ));
+        players.push(createPlayer(0xFF4757, new CANNON.Vec3(0, CONFIG.earthRadius + CONFIG.playerRadius + 0.05, 0)));
+        players.push(createPlayer(0x5352ED, new CANNON.Vec3(0, -(CONFIG.earthRadius + CONFIG.playerRadius + 0.05), 0)));
 
         // ==========================================
         // CLOUDS
         // ==========================================
         const cloudGroup = new THREE.Group();
         scene.add(cloudGroup);
-
-        const cloudMaterial = new THREE.MeshBasicMaterial({
-            color: 0xFFFFFF,
-            transparent: true,
-            opacity: 0.6
-        });
-
+        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.6 });
         for (let i = 0; i < 25; i++) {
-            const cloud = new THREE.Mesh(
-                new THREE.IcosahedronGeometry(0.2 + Math.random() * 0.15, 0),
-                cloudMaterial
-            );
-            
+            const cloud = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2 + Math.random() * 0.15, 0), cloudMat);
             const radius = CONFIG.earthRadius + 0.6 + Math.random() * 0.5;
-            cloud.position.setFromSphericalCoords(
-                radius,
-                Math.random() * Math.PI,
-                Math.random() * Math.PI * 2
-            );
-            
+            cloud.position.setFromSphericalCoords(radius, Math.random() * Math.PI, Math.random() * Math.PI * 2);
             cloud.lookAt(0, 0, 0);
-            cloud.scale.set(
-                1 + Math.random() * 0.3,
-                0.5 + Math.random() * 0.2,
-                0.7
-            );
-            
+            cloud.scale.set(1 + Math.random() * 0.3, 0.5 + Math.random() * 0.2, 0.7);
             cloudGroup.add(cloud);
         }
 
         // ==========================================
-        // TRAIL SYSTEMS (Separate for each player)
+        // TRAIL SYSTEMS
         // ==========================================
-        const TRAIL_MAX = 1000;
-
-        // ==========================================
-        // 🧠 LOOP DETECTION ALGORITHM
-        // ==========================================
-        function checkLoop(playerIdx, currentPos) {
-            const player = players[playerIdx];
-            const path = player.path;
-            const historyLen = path.length;
-
-            // 최소 길이 미달이면 패스
-            if (historyLen < CONFIG.minLoopLength) return;
-
-            // 과거의 발자국들을 역순으로 탐색 (최근 발자국 제외)
-            // 바로 직전(buffer)의 발자국은 당연히 가까우므로 검사에서 제외해야 함
-            const buffer = 8; 
-            
-            for (let i = 0; i < historyLen - buffer; i++) {
-                const oldPos = path[i];
-                const dist = currentPos.distanceTo(oldPos);
-
-                // 🎯 폐곡선 감지 성공! (과거의 내 자취와 만남)
-                if (dist < CONFIG.captureRadius) {
-                    // 루프의 크기(길이) 계산
-                    const loopSize = historyLen - i;
-                    
-                    // 보상: 루프 크기에 비례한 대량 점수
-                    // [변경] 점수 계산은 createTerritoryArea 내부에서 정밀하게 수행함
-                    // const bonusScore = ... (삭제됨)
-                    
-                    // 🆕 [추가] 폐곡선 영역 시각화 (도장 찍기)
-                    const loopPoints = path.slice(i, historyLen);
-                    createTerritoryArea(loopPoints, playerIdx);
-                    
-                    // 피드백: 사운드 & UI
-                    playSound('shoot');
-                    // [이동됨] 텍스트 출력 로직 이동
-
-                    // 중요: 점령 후 경로 초기화
-                    player.path = [];
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // 💬 플로팅 텍스트 (간이 구현)
-        function showFloatingText(msg, pos) {
-            const div = document.createElement('div');
-            div.textContent = msg;
-            div.style.position = 'absolute';
-            div.style.color = '#fff';
-            div.style.fontWeight = 'bold';
-            div.style.textShadow = '0 2px 4px rgba(0,0,0,0.5)';
-            div.style.pointerEvents = 'none';
-            div.style.transform = 'translate(-50%, -50%)';
-            div.style.fontSize = '20px';
-            div.style.transition = 'all 1s ease-out';
-            
-            // 3D 좌표 -> 2D 화면 좌표 변환
-            const vector = pos.clone().project(camera);
-            const x = (vector.x * .5 + .5) * window.innerWidth;
-            const y = (-(vector.y * .5) + .5) * window.innerHeight;
-            
-            div.style.left = `${x}px`;
-            div.style.top = `${y}px`;
-            
-            document.body.appendChild(div);
-            
-            // 애니메이션 후 삭제
-            requestAnimationFrame(() => {
-                div.style.top = `${y - 50}px`;
-                div.style.opacity = '0';
-            });
-            setTimeout(() => div.remove(), 1000);
-        }
-
-        // 🆕 영역 표시 함수 (빗금 패턴 데칼)
-        function createTerritoryArea(points, playerIdx) {
-            if (points.length < 3 || !biomeData) return;
-
-            // 1. UV 좌표계로 변환 및 바운딩 박스 계산
-            const uvPoints = points.map(p => getUV(p));
-            let minU = 1, maxU = 0, minV = 1, maxV = 0;
-            uvPoints.forEach(p => {
-                minU = Math.min(minU, p.u); maxU = Math.max(maxU, p.u);
-                minV = Math.min(minV, p.v); maxV = Math.max(maxV, p.v);
-            });
-
-            // 캔버스 크기 최적화 (영역만큼만 생성)
-            const width = Math.floor((maxU - minU) * biomeWidth) || 64;
-            const height = Math.floor((maxV - minV) * biomeHeight) || 64;
-            
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-
-            // 2. n각형 경로 그리기 (Local Coordinates)
-            ctx.beginPath();
-            uvPoints.forEach((p, i) => {
-                const x = (p.u - minU) * biomeWidth;
-                const y = (p.v - minV) * biomeHeight;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            });
-            ctx.closePath();
-            
-            // 3. 클리핑 & 빗금 패턴 채우기
-            ctx.save();
-            ctx.clip(); // n각형 내부만 칠해지도록 제한
-            
-            // 빗금 스타일 설정
-            ctx.strokeStyle = playerIdx === 0 ? 'rgba(255, 71, 87, 0.6)' : 'rgba(83, 82, 237, 0.6)';
-            ctx.lineWidth = 2; // 빗금 두께
-            const step = 8;    // 빗금 간격
-            const diagMax = width + height;
-            
-            ctx.beginPath();
-            for (let i = -height; i < width; i += step) {
-                ctx.moveTo(i, 0);
-                ctx.lineTo(i + diagMax, diagMax);
-            }
-            ctx.stroke();
-            ctx.restore();
-
-            // 4. 바다 마스킹 (Pixel-Perfect Masking) & 점수 계산
-            const imgData = ctx.getImageData(0, 0, width, height);
-            const data = imgData.data;
-            let landPixelCount = 0;
-
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const i = (y * width + x) * 4;
-                    if (data[i + 3] > 0) { // 그려진 부분(빗금)만 검사
-                        // 전역 UV 좌표로 변환하여 실제 지형 확인
-                        const globalU = minU + (x / biomeWidth);
-                        const globalV = minV + (y / biomeHeight);
-                        
-                        if (isLandAtUV(globalU, globalV)) {
-                            landPixelCount++; // 육지면 점수
-                        } else {
-                            data[i + 3] = 0; // 바다면 투명하게 지움 (Masking)
-                        }
-                    }
-                }
-            }
-            ctx.putImageData(imgData, 0, 0);
-
-            // 5. 점수 적용 (픽셀 수 기반 정밀 점수)
-            // 픽셀 수 -> 게임 점수 환산 (조정 가능)
-            const score = Math.floor(landPixelCount / 100); 
-            if (score > 0) {
-                const pKey = playerIdx === 0 ? 'player1' : 'player2';
-                gameState[pKey].territory += score;
-                showFloatingText(`Land Capture! +${score}`, points[Math.floor(points.length/2)]);
-            }
-
-            // 6. 텍스처 및 메쉬 생성
-            const texture = new THREE.CanvasTexture(canvas);
-            // n각형 중심점 계산
-            const center = new THREE.Vector3();
-            points.forEach(p => center.add(p));
-            center.divideScalar(points.length);
-            center.setLength(CONFIG.earthRadius + 0.03);
-
-            // 평면 메쉬에 텍스처 매핑 (간단한 시각화)
-            // 실제 n각형 모양은 텍스처의 투명도로 표현됨
-            const size = center.distanceTo(points[0]) * 2.5; // 적당한 크기 추정
-            const mesh = new THREE.Mesh(
-                new THREE.PlaneGeometry(size, size),
-                new THREE.MeshBasicMaterial({ 
-                    map: texture, 
-                    transparent: true, 
-                    side: THREE.DoubleSide,
-                    depthWrite: false
-                })
-            );
-            
-            mesh.position.copy(center);
-            mesh.lookAt(0, 0, 0); // 지구 중심 바라보기
-            scene.add(mesh);
-
-            // 5초 후 페이드 아웃
-            setTimeout(() => {
-                const fade = setInterval(() => {
-                    mesh.material.opacity -= 0.05;
-                    if (mesh.material.opacity <= 0) {
-                        clearInterval(fade);
-                        scene.remove(mesh);
-                        texture.dispose();
-                        mesh.geometry.dispose();
-                        mesh.material.dispose();
-                    }
-                }, 50);
-            }, 5000);
-        }
+        const TRAIL_MAX = 2000;  // 1000→2000: 후반부에도 트레일 유지
 
         function createTrailSystem(color) {
-            const geometry = new THREE.SphereGeometry(0.035, 8, 8);
-            const material = new THREE.MeshBasicMaterial({
-                color: color,
-                transparent: true,
-                opacity: 0.7
-            });
-            
-            const mesh = new THREE.InstancedMesh(geometry, material, TRAIL_MAX);
+            const geo = new THREE.SphereGeometry(0.03, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75 });
+            const mesh = new THREE.InstancedMesh(geo, mat, TRAIL_MAX);
             mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
             scene.add(mesh);
-            
             return { mesh, count: 0, dummy: new THREE.Object3D() };
         }
-
         const trail1 = createTrailSystem(0xFF4757);
         const trail2 = createTrailSystem(0x5352ED);
         const trails = [trail1, trail2];
 
         // ==========================================
-        // 🌍 TRUE LAND CAPTURE SYSTEM
+        // LOOP DETECTION (세그먼트 기반)
+        // ─────────────────────────────────────────
+        // 핵심 원칙:
+        //   ① landSegments[] + currentSegment[] 로 관리
+        //   ② 루프는 육지 세그먼트끼리만 닫힐 때만 성립
+        //      → 바다가 중간에 낀 루프 원천 차단
+        //   ③ shotsFired >= 3 이후에만 검사
         // ==========================================
-        let biomeData = null;
-        let biomeWidth = 0;
-        let biomeHeight = 0;
+        function checkLoop(playerIdx, currentPos) {
+            const player    = players[playerIdx];
+            const prevSegs  = player.landSegments;
+            const currSeg   = player.currentSegment;
 
-        const biomeImg = new Image();
-        biomeImg.crossOrigin = "Anonymous";
-        biomeImg.src = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg';
-        
-        biomeImg.onload = () => {
-            const canvas = document.createElement('canvas');
-            biomeWidth = canvas.width = biomeImg.width;
-            biomeHeight = canvas.height = biomeImg.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(biomeImg, 0, 0);
-            biomeData = ctx.getImageData(0, 0, biomeWidth, biomeHeight).data;
-        };
+            if (player.shotsFired < 3) return false;
+            if (prevSegs.length === 0) return false;
+            if (currSeg.length < 3)    return false;
 
-        // 3D 좌표 -> 텍스처 UV 좌표 (0~1) 변환
-        function getUV(pos) {
-            const n = pos.clone().normalize();
-            let u = 0.5 + Math.atan2(n.z, n.x) / (2 * Math.PI);
-            let v = 0.5 - Math.asin(n.y) / Math.PI;
-            return { u, v };
+            for (let si = 0; si < prevSegs.length; si++) {
+                const seg = prevSegs[si];
+                for (let pi = 0; pi < seg.length; pi++) {
+                    if (currentPos.distanceTo(seg[pi]) < CONFIG.captureRadius) {
+                        // 루프 경로: seg[pi..끝] + 중간 세그먼트들 + currSeg
+                        const loopPath = [];
+                        for (let k = pi; k < seg.length; k++) loopPath.push(seg[k]);
+                        for (let si2 = si + 1; si2 < prevSegs.length; si2++)
+                            prevSegs[si2].forEach(p => loopPath.push(p));
+                        currSeg.forEach(p => loopPath.push(p));
+
+                        if (loopPath.length < 5) continue;
+
+                        createTerritoryArea(loopPath, playerIdx);
+
+                        player.landSegments   = [];
+                        player.currentSegment = [];
+                        player.shotsFired     = 0;
+
+                        if (playerIdx === 0) gameState.player1.loops++;
+                        else                 gameState.player2.loops++;
+                        updateStats();
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
-        // 특정 UV 좌표의 지형 확인 (육지/바다)
-        function isLandAtUV(u, v) {
-            if (!biomeData) return true; // 로딩 전엔 육지로 간주
-            
-            const x = Math.floor(u * (biomeWidth - 1));
-            const y = Math.floor(v * (biomeHeight - 1));
-            const idx = (y * biomeWidth + x) * 4;
-            
-            // Blue > Red + 20 이면 바다
-            return !(biomeData[idx + 2] > biomeData[idx] + 20);
-        }
+        // ==========================================
+        // ADD TRAIL + 잉크 시스템
+        // ==========================================
+        function addTrail(idx, pos) {
+            const player  = players[idx];
+            const psState = idx === 0 ? gameState.player1 : gameState.player2;
+            const onLand  = getBiome(pos) === 'LAND';
 
-        function getBiome(pos) {
-            const { u, v } = getUV(pos);
-            return isLandAtUV(u, v) ? 'LAND' : 'OCEAN';
-        }
+            if (!onLand) {
+                // 바다 진입: 현재 세그먼트 완성 → landSegments에 저장
+                if (player.currentSegment.length > 0) {
+                    player.landSegments.push([...player.currentSegment]);
+                    player.currentSegment = [];
 
-            // 🟢 [복구 및 수정] 함수 선언부와 바다 체크 로직이 사라졌었습니다!
-            function addTrail(idx, pos) {
-              // 🛑 [신규] 바다 체크: 바다 위라면 발자국도 안 찍고, 경로도 끊어버림
-              if (getBiome(pos) === 'OCEAN') {
-                  players[idx].path = []; // 경로 끊기 (폐곡선 불가)
-                  return; // 발자국 생성 중단
-              }
+                    // 바다 진입 잉크 페널티
+                    psState.ink = Math.max(0, psState.ink - CONFIG.inkOceanPenalty);
+                    updateInkUI();
 
-              const sys = trails[idx];   // ✅ 내부에서 객체 가져오기
-              if (sys.count >= TRAIL_MAX) return;  // ✅ 1011번에 정의된 상수 사용
+                    // 시각 피드백: 트레일 페이드
+                    const mat = trails[idx].mesh.material;
+                    mat.opacity = 0.15;
+                    setTimeout(() => { mat.opacity = 0.75; }, 500);
+                }
+                return;
+            }
 
-            // 1. 시각적 메쉬 추가 (기존 로직)
+            // 잉크 부족 시 트레일 불가 (공은 계속 굴러감)
+            if (psState.ink <= 0) return;
+
+            // 잉크 소모 (육지 1점)
+            psState.ink = Math.max(0, psState.ink - CONFIG.inkLandCost);
+            updateInkUI();
+
+            // 시각 트레일 (육지만)
+            const sys = trails[idx];
+            const ringIdx = sys.count % TRAIL_MAX;
             sys.dummy.position.copy(pos);
             sys.dummy.position.setLength(CONFIG.earthRadius + 0.02);
-            sys.dummy.lookAt(0,0,0);
+            sys.dummy.lookAt(0, 0, 0);
             sys.dummy.rotateZ(Math.random() * Math.PI);
             const s = 0.8 + Math.random() * 0.4;
-            sys.dummy.scale.set(s,s,1);
+            sys.dummy.scale.set(s, s, 1);
             sys.dummy.updateMatrix();
-            sys.mesh.setMatrixAt(sys.count++, sys.dummy.matrix);
+            sys.mesh.setMatrixAt(ringIdx, sys.dummy.matrix);
             sys.mesh.instanceMatrix.needsUpdate = true;
+            sys.count++;
 
-            // 2. [신규] 논리적 경로 저장
-            const player = players[idx];
-            const logicalPos = pos.clone(); // 깊은 복사
-            player.path.push(logicalPos);
+            // 현재 세그먼트에 추가
+            player.currentSegment.push(pos.clone());
 
-            // 3. [신규] 폐곡선 감지 시도
-            const captured = checkLoop(idx, logicalPos);
-
-            // 4. 점수 갱신 (기본 이동 점수 + 캡처 시에는 위에서 보너스 이미 추가됨)
-            if (!captured) {
-                const territoryKey = idx === 0 ? 'player1' : 'player2';
-                gameState[territoryKey].territory += 0.05;
-            }
-            updateStats(); // 또는 영역 업데이트 로직 추가
+            // 루프 감지
+            checkLoop(idx, pos.clone());
         }
 
         // ==========================================
-        // AIMING SYSTEM (Simplified)
+        // FLOATING TEXT
         // ==========================================
+        function showFloatingText(msg, pos, color = '#fff') {
+            const div = document.createElement('div');
+            div.textContent = msg;
+            Object.assign(div.style, {
+                position: 'fixed', color: color, fontWeight: 'bold',
+                textShadow: '0 2px 6px rgba(0,0,0,0.8)', pointerEvents: 'none',
+                transform: 'translate(-50%,-50%)', fontSize: '18px',
+                transition: 'all 1s ease-out', zIndex: 200,
+                fontFamily: "'Fredoka One', cursive",
+            });
+            const v = pos.clone().project(camera);
+            div.style.left = `${(v.x * .5 + .5) * window.innerWidth}px`;
+            div.style.top  = `${(-(v.y * .5) + .5) * window.innerHeight}px`;
+            document.body.appendChild(div);
+            requestAnimationFrame(() => {
+                div.style.top = `${parseFloat(div.style.top) - 60}px`;
+                div.style.opacity = '0';
+            });
+            setTimeout(() => div.remove(), 1100);
+        }
+
         // ==========================================
-        // AIMING SYSTEM (Billiards Style)
+        // AIMING SYSTEM
         // ==========================================
         const aimGroup = new THREE.Group();
         aimGroup.visible = false;
         scene.add(aimGroup);
 
-        // 1. 앞쪽 화살표 (Arrow Head)
         const arrow = new THREE.ArrowHelper(
-            new THREE.Vector3(0, 1, 0),
-            new THREE.Vector3(0, 0, 0),
-            1.5,
-            0x72D27E,
-            0.4, 0.3
+            new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0),
+            1.5, 0x72D27E, 0.4, 0.3
         );
         aimGroup.add(arrow);
 
-        // 2. 뒤쪽 꼬리 (Tail Line - 당기는 큐대)
         const tailGeo = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,1)
+            new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 1)
         ]);
-        const tailMat = new THREE.LineBasicMaterial({ 
-            color: 0xFFFFFF, transparent: true, opacity: 0.6 
-        });
-        const tailLine = new THREE.Line(tailGeo, tailMat);
+        const tailLine = new THREE.Line(tailGeo, new THREE.LineBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.6 }));
         aimGroup.add(tailLine);
 
-        // 3. 짧은 궤적 (Short Trajectory Guide)
-        const TRAJ_POINTS = 10;  // 30 -> 10으로 축소 (초반 경로만 표시)
-        const trajectoryGeometry = new THREE.BufferGeometry();
-        const trajectoryPositions = new Float32Array(TRAJ_POINTS * 3);
-        trajectoryGeometry.setAttribute(
-            'position',
-            new THREE.BufferAttribute(trajectoryPositions, 3)
+        // 궤적 미리보기 (포인트 수 증가)
+        const TRAJ_POINTS = 20;
+        const trajGeo = new THREE.BufferGeometry();
+        trajGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAJ_POINTS * 3), 3));
+        const trajLine = new THREE.Line(
+            trajGeo,
+            new THREE.LineDashedMaterial({ color: 0xFFFFFF, dashSize: 0.15, gapSize: 0.1, transparent: true, opacity: 0.45 })
         );
-
-        const trajectoryMaterial = new THREE.LineDashedMaterial({
-            color: 0xFFFFFF,
-            dashSize: 0.15,
-            gapSize: 0.1,
-            transparent: true,
-            opacity: 0.4
-        });
-
-        const trajectoryLine = new THREE.Line(
-            trajectoryGeometry,
-            trajectoryMaterial
-        );
-        trajectoryLine.visible = false;
-        scene.add(trajectoryLine);
-
-        // ==========================================
-        // TERRITORY VISUALIZATION
-        // ==========================================
-        const territories = new Map();
-
-        function calculateTerritory(playerIndex) {
-            const trailSystem = playerIndex === 0 ? trail1 : trail2;
-            // Simple circle-based territory calculation
-            return Math.min((trailSystem.count / TRAIL_MAX) * 100, 100);
-        }
+        trajLine.visible = false;
+        scene.add(trajLine);
 
         // ==========================================
         // UI ELEMENTS
         // ==========================================
         const elements = {
-            timer: document.getElementById('timer'),
-            territoryP1: document.getElementById('territory-p1'),
-            territoryP2: document.getElementById('territory-p2'),
-            avatarP1: document.getElementById('avatar-p1'),
-            avatarP2: document.getElementById('avatar-p2'),
+            timer:        document.getElementById('timer'),
+            territoryP1:  document.getElementById('territory-p1'),
+            territoryP2:  document.getElementById('territory-p2'),
+            avatarP1:     document.getElementById('avatar-p1'),
+            avatarP2:     document.getElementById('avatar-p2'),
             turnIndicator: document.getElementById('turn-indicator'),
-            turnText: document.getElementById('turn-text'),
-            powerGauge: document.getElementById('power-gauge'),
-            powerFill: document.getElementById('power-fill'),
-            statsPanel: document.getElementById('stats-panel'),
+            turnText:     document.getElementById('turn-text'),
+            powerGauge:   document.getElementById('power-gauge'),
+            powerFill:    document.getElementById('power-fill'),
+            statsPanel:   document.getElementById('stats-panel'),
             optionsPanel: document.getElementById('options-panel'),
-            gameOver: document.getElementById('game-over'),
-            
-            // Stats
-            statTurn: document.getElementById('stat-turn'),
-            statP1Shots: document.getElementById('stat-p1-shots'),
-            statP2Shots: document.getElementById('stat-p2-shots'),
+            gameOver:     document.getElementById('game-over'),
+            statTurn:     document.getElementById('stat-turn'),
+            statP1Shots:  document.getElementById('stat-p1-shots'),
+            statP2Shots:  document.getElementById('stat-p2-shots'),
             statP1Distance: document.getElementById('stat-p1-distance'),
             statP2Distance: document.getElementById('stat-p2-distance'),
-            statCollisions: document.getElementById('stat-collisions')
+            statCollisions: document.getElementById('stat-collisions'),
         };
 
         // ==========================================
         // GAME LOGIC
         // ==========================================
         function switchTurn() {
-            gameState.isFollowing = true; // 🟢 [추가] 턴이 바뀌면 추적 활성화
+            clearInterval(gameState._turnTimer);
+            const countdown = document.getElementById('turn-countdown');
+            if (countdown) countdown.style.display = 'none';
+            gameState.isFollowing = true;
+
+            // 이전 플레이어 잉크 충전
+            const prevPs = gameState.currentPlayer === 1 ? gameState.player1 : gameState.player2;
+            prevPs.ink = Math.min(CONFIG.inkMax, prevPs.ink + CONFIG.inkRechargePerTurn);
+
             gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
             gameState.turn++;
             playSound('turn');
             gameState.isPlanning = true;
             gameState.hasShot = false;
-            
-            // Update UI
             elements.avatarP1.classList.toggle('active', gameState.currentPlayer === 1);
             elements.avatarP2.classList.toggle('active', gameState.currentPlayer === 2);
-            
-            // Show turn indicator
             elements.turnText.textContent = `Player ${gameState.currentPlayer}'s Turn`;
             elements.turnIndicator.classList.add('show');
-            setTimeout(() => {
-                elements.turnIndicator.classList.remove('show');
-            }, 1500);
-            
+            setTimeout(() => elements.turnIndicator.classList.remove('show'), 1500);
             updateStats();
+            setTimeout(() => startTurnTimer(), 800);
         }
 
         function updateStats() {
@@ -1431,47 +1711,64 @@
             elements.statP1Distance.textContent = `${(gameState.player1.distance * 0.1).toFixed(1)} km`;
             elements.statP2Distance.textContent = `${(gameState.player2.distance * 0.1).toFixed(1)} km`;
             elements.statCollisions.textContent = gameState.collisions;
+            const lp1 = document.getElementById('stat-p1-loops');
+            const lp2 = document.getElementById('stat-p2-loops');
+            if (lp1) lp1.textContent = gameState.player1.loops;
+            if (lp2) lp2.textContent = gameState.player2.loops;
+            updateInkUI();
+        }
+
+        function updateInkUI() {
+            const i1 = gameState.player1.ink, i2 = gameState.player2.ink;
+            const bar1 = document.getElementById('ink-bar-p1');
+            const bar2 = document.getElementById('ink-bar-p2');
+            const lbl1 = document.getElementById('ink-p1');
+            const lbl2 = document.getElementById('ink-p2');
+            if (bar1) bar1.style.width = `${i1}%`;
+            if (bar2) bar2.style.width = `${i2}%`;
+            if (lbl1) lbl1.textContent = Math.ceil(i1);
+            if (lbl2) lbl2.textContent = Math.ceil(i2);
+            // 잉크 부족 경고: 20% 이하 시 주황/빨강 펄스
+            if (bar1) bar1.style.background = i1 < 20 ? '#FF4757' : '';
+            if (bar2) bar2.style.background = i2 < 20 ? '#FF4757' : '';
         }
 
         function updateTimer() {
-            if (gameState.timeRemaining <= 0) {
-                endGame();
-                return;
-            }
-            
+            if (gameState.timeRemaining <= 0) { endGame(); return; }
             gameState.timeRemaining--;
-            const minutes = Math.floor(gameState.timeRemaining / 60);
-            const seconds = gameState.timeRemaining % 60;
-            elements.timer.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-            
-            // Update territories
-            gameState.player1.territory = calculateTerritory(0);
-            gameState.player2.territory = calculateTerritory(1);
-            elements.territoryP1.textContent = `${gameState.player1.territory.toFixed(1)}%`;
-            elements.territoryP2.textContent = `${gameState.player2.territory.toFixed(1)}%`;
+            const m = Math.floor(gameState.timeRemaining / 60);
+            const s = gameState.timeRemaining % 60;
+            elements.timer.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+            // 30초 이하 → 긴급 붉은색 표시
+            elements.timer.style.color = gameState.timeRemaining <= 30 ? 'var(--player1-color)' : 'var(--text-dark)';
         }
 
         function endGame() {
-            const winner = gameState.player1.territory > gameState.player2.territory ? 1 : 2;
-            
-            document.getElementById('winner-text').textContent = `Player ${winner} Wins!`;
-            document.getElementById('final-p1').textContent = `${gameState.player1.territory.toFixed(1)}%`;
-            document.getElementById('final-p2').textContent = `${gameState.player2.territory.toFixed(1)}%`;
-            
+            gameActive = false;
+            clearInterval(gameState._turnTimer);
+            const countdown = document.getElementById('turn-countdown');
+            if (countdown) countdown.style.display = 'none';
+            const p1 = gameState.player1.territory;
+            const p2 = gameState.player2.territory;
+            let winText;
+            if (Math.abs(p1 - p2) < 0.01) winText = '🤝 무승부!';
+            else winText = `🏆 Player ${p1 > p2 ? 1 : 2} 우승!`;
+            document.getElementById('winner-text').textContent = winText;
+            document.getElementById('winner-text').style.color = p1 > p2 ? 'var(--player1-color)' : 'var(--player2-color)';
+            document.getElementById('final-p1').textContent = `${p1.toFixed(2)}%`;
+            document.getElementById('final-p2').textContent = `${p2.toFixed(2)}%`;
             elements.gameOver.classList.add('show');
         }
 
         // ==========================================
-        // MOUSE INTERACTION
+        // FORCE CALCULATION & TRAJECTORY PREVIEW
         // ==========================================
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
-        let isDragging = false;
-        const dragStart = new THREE.Vector2();
 
-        function getIntersects(event, objects) {
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        function getIntersects(clientX, clientY, objects) {
+            mouse.x =  (clientX / window.innerWidth)  * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
             return raycaster.intersectObjects(objects, true);
         }
@@ -1479,272 +1776,193 @@
         function calculateForce(currentX, currentY, startX, startY) {
             const deltaX = currentX - startX;
             const deltaY = currentY - startY;
-            
             const player = players[gameState.currentPlayer - 1];
             const surfaceNormal = player.mesh.position.clone().normalize();
-            
-            // 1. 카메라의 현재 기준축(Right, Up) 가져오기
             const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-            const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
-            
-            // 2. 화면 드래그 방향의 정반대(180도) 힘 벡터 생성
-            // 마우스 우측 이동(+X) -> 힘 좌측(-camRight)
-            // 마우스 하단 이동(+Y) -> 힘 상단(+camUp)
+            const camUp    = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
             const forceVector = new THREE.Vector3()
                 .addScaledVector(camRight, -deltaX)
-                .addScaledVector(camUp, deltaY);
-                
-            // 3. 지구 표면(접평면)에 투영 (Project onto tangent plane)
-            // 공이 하늘로 솟구치지 않고 표면을 따라가도록 보정
-            // v_proj = v - (v . n) * n
+                .addScaledVector(camUp,     deltaY);
             forceVector.sub(surfaceNormal.multiplyScalar(forceVector.dot(surfaceNormal)));
-            
-            const forceDir = forceVector.normalize();
-                
-            return { forceDir, deltaX, deltaY };
+            return { forceDir: forceVector.normalize(), deltaX, deltaY };
         }
 
+        // ★ 궤적 미리보기에 실제 물리(중력+코리올리) 반영
         function updateTrajectory(startPos, impulseVector) {
+            const dt = 0.016;
             const simPos = startPos.clone();
-            const simVel = impulseVector
-                .clone()
-                .multiplyScalar(1 / CONFIG.mass * 0.016);
-            
-            const positions = trajectoryLine.geometry.attributes.position.array;
-            
+            const simVel = impulseVector.clone().multiplyScalar(dt / CONFIG.mass);
+            const positions = trajLine.geometry.attributes.position.array;
+            const omega = new THREE.Vector3(0, 1, 0);
+
             for (let i = 0; i < TRAJ_POINTS; i++) {
-                positions[i * 3] = simPos.x;
+                positions[i * 3]     = simPos.x;
                 positions[i * 3 + 1] = simPos.y;
                 positions[i * 3 + 2] = simPos.z;
-                
-                const gravityDir = simPos.clone().normalize().negate();
-                simVel.add(gravityDir.multiplyScalar(0.04));
-                simVel.multiplyScalar(0.98);
+
+                // 구면 중력 (실제 물리와 동일 수식)
+                const gravDir = simPos.clone().normalize().negate();
+                const gravAcc = gravDir.multiplyScalar(CONFIG.gravity * dt * dt);
+
+                // 코리올리 (실제 적용 수식과 동일)
+                const coriolisAcc = simVel.clone().cross(omega)
+                    .multiplyScalar(CONFIG.coriolisFactor * dt);
+
+                simVel.add(gravAcc).add(coriolisAcc);
+                simVel.multiplyScalar(1 - CONFIG.damping * dt);
                 simPos.add(simVel);
-                
+
                 if (simPos.length() < CONFIG.earthRadius + CONFIG.playerRadius) {
                     simPos.setLength(CONFIG.earthRadius + CONFIG.playerRadius + 0.02);
                 }
             }
-            
-            trajectoryLine.geometry.attributes.position.needsUpdate = true;
-            trajectoryLine.computeLineDistances();
+            trajLine.geometry.attributes.position.needsUpdate = true;
+            trajLine.computeLineDistances();
         }
 
-        window.addEventListener('mousedown', (e) => {
-            if (!gameState.isPlanning || gameState.hasShot) return;
-            
+        // ==========================================
+        // INPUT: POINTER EVENTS (마우스 + 터치 통합)
+        // ==========================================
+        let isDragging = false;
+        const dragStart = new THREE.Vector2();
+
+        function onPointerDown(e) {
+            if (!gameActive || !gameState.isPlanning || gameState.hasShot) return;
+            const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+            const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+            if (clientX == null) return;
             const player = players[gameState.currentPlayer - 1];
-            const hits = getIntersects(e, [player.mesh]);
-            
+            const hits = getIntersects(clientX, clientY, [player.mesh]);
             if (hits.length > 0) {
                 isDragging = true;
                 controls.enabled = false;
-                dragStart.set(e.clientX, e.clientY);
-                
+                dragStart.set(clientX, clientY);
                 aimGroup.visible = true;
-                trajectoryLine.visible = true;
+                trajLine.visible = true;
                 aimGroup.position.copy(player.mesh.position);
-                
                 elements.powerGauge.classList.add('visible');
             }
-        });
+        }
 
-        window.addEventListener('mousemove', (e) => {
+        function onPointerMove(e) {
+            const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+            const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+            if (clientX == null) return;
+
             if (!isDragging) {
                 const player = players[gameState.currentPlayer - 1];
-                const hits = getIntersects(e, [player.mesh]);
+                const hits = getIntersects(clientX, clientY, [player.mesh]);
                 document.body.style.cursor = hits.length > 0 ? 'grab' : 'default';
                 return;
             }
-            
             document.body.style.cursor = 'grabbing';
-            
-            const { forceDir, deltaX, deltaY } = calculateForce(
-                e.clientX, e.clientY,
-                dragStart.x, dragStart.y
-            );
-            
-            const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            const MAX_DRAG = 250;
-            const powerRatio = Math.min(dist, MAX_DRAG) / MAX_DRAG;
-            
-            // 1. Arrow Head Update
-            arrow.setDirection(forceDir);
-            const arrowLength = 1 + powerRatio * 2;
-            arrow.setLength(arrowLength, 0.4, 0.3);
-            arrow.setColor(new THREE.Color().setHSL(0.3 * (1 - powerRatio), 1, 0.5));
 
-            // 2. Tail Line Update (당기는 방향으로 늘어남)
+            const { forceDir } = calculateForce(clientX, clientY, dragStart.x, dragStart.y);
+            const dx = clientX - dragStart.x, dy = clientY - dragStart.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const MAX_DRAG = 250;
+            const power = Math.min(dist, MAX_DRAG) / MAX_DRAG;
+
+            arrow.setDirection(forceDir);
+            arrow.setLength(1 + power * 2, 0.4, 0.3);
+            arrow.setColor(new THREE.Color().setHSL(0.3 * (1 - power), 1, 0.5));
+
             const tailDir = forceDir.clone().negate();
             tailLine.lookAt(tailLine.position.clone().add(tailDir));
-            tailLine.scale.z = powerRatio * 3.5; // 길이 조절
+            tailLine.scale.z = power * 3.5;
 
-            // 3. Trajectory & UI Update
-            const impulseStrength = powerRatio * CONFIG.shootForce;
-            const impulseVector = forceDir.clone().multiplyScalar(impulseStrength);
-            const player = players[gameState.currentPlayer - 1];
-            updateTrajectory(player.mesh.position, impulseVector);
-            
-            elements.powerFill.style.width = `${powerRatio * 100}%`;
+            const impulse = forceDir.clone().multiplyScalar(power * CONFIG.shootForce);
+            updateTrajectory(players[gameState.currentPlayer - 1].mesh.position, impulse);
+            elements.powerFill.style.width = `${power * 100}%`;
+            if (power > 0.05) playSound('charge');
+        }
 
-            // 4. Sound Effect (Charge)
-            if (powerRatio > 0.05) playSound('charge');
-        });
-
-        window.addEventListener('mouseup', (e) => {
+        function onPointerUp(e) {
             if (!isDragging) return;
-            
             isDragging = false;
             controls.enabled = true;
-            
             aimGroup.visible = false;
-            trajectoryLine.visible = false;
+            trajLine.visible = false;
             elements.powerGauge.classList.remove('visible');
             elements.powerFill.style.width = '0%';
             document.body.style.cursor = 'default';
-            
-            const { forceDir, deltaX, deltaY } = calculateForce(
-                e.clientX, e.clientY,
-                dragStart.x, dragStart.y
-            );
-            
-            const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            const MAX_DRAG = 250;
-            const powerRatio = Math.min(dist, MAX_DRAG) / MAX_DRAG;
-            
-            const impulseStrength = powerRatio * CONFIG.shootForce;
-            const impulse = forceDir.multiplyScalar(impulseStrength);
-            
+
+            const clientX = e.clientX ?? e.changedTouches?.[0]?.clientX;
+            const clientY = e.clientY ?? e.changedTouches?.[0]?.clientY;
+            if (clientX == null) return;
+
+            const { forceDir } = calculateForce(clientX, clientY, dragStart.x, dragStart.y);
+            const dx = clientX - dragStart.x, dy = clientY - dragStart.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const power = Math.min(dist, 250) / 250;
+
+            // ★ 최소 발사력 10% 미만은 무시 — 탭/오조작 방지
+            if (power < 0.1) return;
+
+            const impulse = forceDir.clone().multiplyScalar(power * CONFIG.shootForce);
             const player = players[gameState.currentPlayer - 1];
-            player.body.applyImpulse(impulse, player.body.position);
-            gameState.isFollowing = true; // 🟢 [추가] 발사 순간부터 미사일 추적 시작
-            playSound('shoot'); // [추가됨] 발사 사운드
-            
+
+            // 발사 횟수 기록 (폐곡선 3-shot 규칙용)
+            player.shotsFired++;
+
+            player.body.applyImpulse(
+                new CANNON.Vec3(impulse.x, impulse.y, impulse.z),
+                player.body.position
+            );
+            gameState.isFollowing = true;
+            playSound('shoot');
             gameState.hasShot = true;
             gameState.isPlanning = false;
-            
-            if (gameState.currentPlayer === 1) {
-                gameState.player1.shots++;
-            } else {
-                gameState.player2.shots++;
-            }
-            
+            // 발사 후 턴 타이머 종료 (공이 멈출 때까지 대기)
+            clearInterval(gameState._turnTimer);
+            const countdown = document.getElementById('turn-countdown');
+            if (countdown) countdown.style.display = 'none';
+            if (gameState.currentPlayer === 1) gameState.player1.shots++;
+            else gameState.player2.shots++;
             updateStats();
-        });
-
-        // ==========================================
-        // UI CONTROLS
-        // ==========================================
-        document.getElementById('btn-stats').addEventListener('click', () => {
-            elements.statsPanel.style.display = 
-                elements.statsPanel.style.display === 'none' ? 'block' : 'none';
-        });
-
-        document.getElementById('btn-options').addEventListener('click', () => {
-            elements.optionsPanel.style.display = 
-                elements.optionsPanel.style.display === 'none' ? 'block' : 'none';
-        });
-
-        document.getElementById('btn-shoot').addEventListener('click', () => {
-            if (!gameState.hasShot) return;
-            
-            // Wait for ball to stop
-            const player = players[gameState.currentPlayer - 1];
-            if (player.body.velocity.length() < 0.5) {
-                switchTurn();
-            }
-        });
-
-        document.getElementById('btn-reset').addEventListener('click', () => {
-            location.reload();
-        });
-
-        document.getElementById('btn-help').addEventListener('click', () => {
-            alert('🌍 Globe Striker\n\n' +
-                  '1. Click and drag your ball backward to aim\n' +
-                  '2. Release to shoot\n' +
-                  '3. Leave trails to claim territory\n' +
-                  '4. Most territory wins!\n\n' +
-                  'Good luck! 🎯');
-        });
-
-        // Toggle switches
-        document.getElementById('toggle-sound').addEventListener('click', function() {
-            this.classList.toggle('active');
-            gameState.settings.soundEnabled = this.classList.contains('active');
-        });
-
-        document.getElementById('toggle-rotation').addEventListener('click', function() {
-            this.classList.toggle('active');
-            gameState.settings.cameraRotation = this.classList.contains('active');
-        });
-
-        document.getElementById('toggle-trails').addEventListener('click', function() {
-            this.classList.toggle('active');
-            gameState.settings.showTrails = this.classList.contains('active');
-            trail1.mesh.visible = this.classList.contains('active');
-            trail2.mesh.visible = this.classList.contains('active');
-        });
-
-        // Volume slider
-        let volumeDragging = false;
-        const volumeSlider = document.getElementById('volume-slider');
-        const volumeFill = document.getElementById('volume-fill');
-
-        volumeSlider.addEventListener('mousedown', (e) => {
-            volumeDragging = true;
-            updateVolume(e);
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (volumeDragging) updateVolume(e);
-        });
-
-        document.addEventListener('mouseup', () => {
-            volumeDragging = false;
-        });
-
-        function updateVolume(e) {
-            const rect = volumeSlider.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const percent = Math.max(0, Math.min(1, x / rect.width));
-            volumeFill.style.width = `${percent * 100}%`;
-            gameState.settings.volume = percent;
         }
 
+        // 이벤트 등록 (마우스 + 터치)
+        renderer.domElement.addEventListener('pointerdown',  onPointerDown, { passive: false });
+        window.addEventListener('pointermove', onPointerMove, { passive: true });
+        window.addEventListener('pointerup',   onPointerUp);
+        // 터치 스크롤 방지
+        renderer.domElement.addEventListener('touchstart', e => { if(isDragging) e.preventDefault(); }, { passive: false });
+        renderer.domElement.addEventListener('touchmove',  e => { if(isDragging) e.preventDefault(); }, { passive: false });
+
         // ==========================================
-        // PHYSICS & FORCES
+        // PHYSICS FORCES
         // ==========================================
         function applyPhysicsForces(body) {
-            const gravityDir = body.position.clone().negate().unit();
-            body.applyForce(
-                gravityDir.scale(CONFIG.gravity * body.mass),
-                body.position
-            );
-            
+            // 구면 중력
+            const gravDir = body.position.clone().negate().unit();
+            body.applyForce(gravDir.scale(CONFIG.gravity * body.mass), body.position);
+
+            // 코리올리 (속도가 충분할 때만)
             if (body.velocity.lengthSquared() > 0.1) {
-                const vel = new THREE.Vector3(
-                    body.velocity.x,
-                    body.velocity.y,
-                    body.velocity.z
-                );
+                const vel = new THREE.Vector3(body.velocity.x, body.velocity.y, body.velocity.z);
                 const omega = new THREE.Vector3(0, 1, 0);
-                const coriolis = new THREE.Vector3()
-                    .crossVectors(vel, omega)
-                    .multiplyScalar(CONFIG.coriolisFactor);
-                body.applyForce(coriolis, body.position);
+
+                // 위도에 따른 코리올리 보정 (적도=0, 극=최대)
+                // ※ CANNON.Vec3.normalize()는 length(Number)를 반환 → .y = undefined → NaN 전파
+                const posN = new THREE.Vector3(body.position.x, body.position.y, body.position.z).normalize();
+                const lat = Math.asin(Math.max(-1, Math.min(1, posN.y)));
+                const latScale = Math.abs(Math.sin(lat));
+
+                const coriolis = new THREE.Vector3().crossVectors(vel, omega)
+                    .multiplyScalar(CONFIG.coriolisFactor * (0.3 + 0.7 * latScale));
+                body.applyForce(
+                    new CANNON.Vec3(coriolis.x, coriolis.y, coriolis.z),
+                    body.position
+                );
             }
         }
 
-        // Collision detection
+        // 충돌 감지
         world.addEventListener('postStep', () => {
-            // Simple collision check between players
-            const p1Pos = new THREE.Vector3().copy(players[0].body.position);
-            const p2Pos = new THREE.Vector3().copy(players[1].body.position);
-            const dist = p1Pos.distanceTo(p2Pos);
-            
-            if (dist < CONFIG.playerRadius * 2.5) {
+            const p1 = new THREE.Vector3().copy(players[0].body.position);
+            const p2 = new THREE.Vector3().copy(players[1].body.position);
+            if (p1.distanceTo(p2) < CONFIG.playerRadius * 2.5) {
                 gameState.collisions++;
                 updateStats();
             }
@@ -1755,147 +1973,252 @@
         // ==========================================
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enablePan = false;
-        controls.minDistance = 6;   // Closer minimum
-        controls.maxDistance = 18;  // Closer maximum
+        controls.minDistance = 6;
+        controls.maxDistance = 18;
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.addEventListener('start', () => { 
-            gameState.isRotating = true;
-            gameState.isFollowing = false; // 🟢 드래그 시작 시 추적 모드 해제 (자유 시점)
+        controls.addEventListener('start', () => { gameState.isRotating = true; gameState.isFollowing = false; });
+        controls.addEventListener('end',   () => { gameState.isRotating = false; });
+        window.addEventListener('dblclick', () => { gameState.isFollowing = true; });
+
+        // ==========================================
+        // UI CONTROLS
+        // ==========================================
+        document.getElementById('btn-stats').addEventListener('click', () => {
+            elements.statsPanel.style.display = elements.statsPanel.style.display === 'none' ? 'block' : 'none';
         });
-        
-        controls.addEventListener('end', () => { 
-            gameState.isRotating = false; 
-            // 드래그가 끝나도 isFollowing을 true로 돌리지 않음 (보고 싶은 곳 계속 보기 위해)
+        document.getElementById('btn-options').addEventListener('click', () => {
+            elements.optionsPanel.style.display = elements.optionsPanel.style.display === 'none' ? 'block' : 'none';
+        });
+        document.getElementById('btn-shoot').addEventListener('click', () => {
+            if (!gameState.hasShot) return;
+            if (players[gameState.currentPlayer - 1].body.velocity.length() < 0.5) switchTurn();
+        });
+        document.getElementById('btn-reset').addEventListener('click', () => location.reload());
+        document.getElementById('btn-help').addEventListener('click', () => {
+            const m = document.getElementById('help-modal');
+            m.style.display = 'flex';
+        });
+        document.getElementById('toggle-sound').addEventListener('click', function() {
+            this.classList.toggle('active');
+            gameState.settings.soundEnabled = this.classList.contains('active');
+        });
+        document.getElementById('toggle-rotation').addEventListener('click', function() {
+            this.classList.toggle('active');
+            gameState.settings.cameraRotation = this.classList.contains('active');
+        });
+        document.getElementById('toggle-trails').addEventListener('click', function() {
+            this.classList.toggle('active');
+            const show = this.classList.contains('active');
+            gameState.settings.showTrails = show;
+            trail1.mesh.visible = trail2.mesh.visible = show;
         });
 
-        // 🟢 [신규] 더블 클릭 시 다시 내 캐릭터 추적
-        window.addEventListener('dblclick', () => {
-            gameState.isFollowing = true;
-        });
+        // Volume slider
+        let volDragging = false;
+        const volSlider = document.getElementById('volume-slider');
+        const volFill   = document.getElementById('volume-fill');
+        function updateVolume(e) {
+            const rect = volSlider.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            volFill.style.width = `${pct * 100}%`;
+            gameState.settings.volume = pct;
+        }
+        volSlider.addEventListener('mousedown', e => { volDragging = true; updateVolume(e); });
+        document.addEventListener('mousemove', e => { if (volDragging) updateVolume(e); });
+        document.addEventListener('mouseup', () => { volDragging = false; });
 
         // ==========================================
         // ANIMATION LOOP
         // ==========================================
         const clock = new THREE.Clock();
         let lastSecond = 0;
+        let gameActive = false;   // Play 버튼 클릭 후에만 true
 
         function animate() {
             requestAnimationFrame(animate);
-            
             const deltaTime = Math.min(clock.getDelta(), 0.1);
-            const elapsedTime = clock.getElapsedTime();
-            
-            // Timer update (every second)
-            if (Math.floor(elapsedTime) > lastSecond) {
-                lastSecond = Math.floor(elapsedTime);
-                updateTimer();
+            const elapsed   = clock.getElapsedTime();
+
+            // 게임 타이머 - Play 이후에만 카운트
+            if (gameActive) {
+                if (Math.floor(elapsed) > lastSecond) {
+                    lastSecond = Math.floor(elapsed);
+                    updateTimer();
+                }
             }
-            
-            // Physics
-            players.forEach(player => applyPhysicsForces(player.body));
+
+            players.forEach(p => applyPhysicsForces(p.body));
             world.step(deltaTime);
-            
-            // Sync visuals
+
             players.forEach((player, idx) => {
                 player.mesh.position.copy(player.body.position);
                 player.mesh.quaternion.copy(player.body.quaternion);
-                
-                // Trail generation
+
+                if (!gameActive) return;  // Play 전에는 트레일/루프 감지 비활성화
+
                 const speed = player.body.velocity.length();
                 if (speed > CONFIG.trailSpeedThreshold && gameState.settings.showTrails) {
-                    const currentPos = new THREE.Vector3().copy(player.body.position);
-                    const dist = currentPos.distanceTo(player.lastTrailPos);
-                    
-                    if (dist > CONFIG.trailSpacing) {
-                        const trailSystem = idx === 0 ? trail1 : trail2;
-                        addTrail(idx, currentPos);  // 객체 대신 인덱스 전달
-                        player.lastTrailPos.copy(currentPos);
-                        
-                        if (idx === 0) {
-                            gameState.player1.distance += dist;
-                        } else {
-                            gameState.player2.distance += dist;
-                        }
+                    const curPos = new THREE.Vector3().copy(player.body.position);
+                    const d = curPos.distanceTo(player.lastTrailPos);
+                    if (d > CONFIG.trailSpacing) {
+                        addTrail(idx, curPos);
+                        player.lastTrailPos.copy(curPos);
+                        if (idx === 0) gameState.player1.distance += d;
+                        else           gameState.player2.distance += d;
                     }
                 }
-                
-                // Auto-advance turn if ball stopped
+
                 if (gameState.hasShot && !gameState.isPlanning) {
                     if (idx === gameState.currentPlayer - 1 && speed < 0.3) {
                         setTimeout(() => switchTurn(), 500);
-                        gameState.isPlanning = true; // Prevent multiple triggers
+                        gameState.isPlanning = true;
                     }
                 }
             });
-            
-            // Cloud rotation
+
             if (gameState.settings.cameraRotation) {
                 cloudGroup.rotation.y += 0.0001;
+                // ★ earthMesh 자전 제거 — 회전하면 UV 좌표(고정)와 텍스처(회전)가 어긋나 육지/바다 판별 오류 발생
             }
-            
-            // Dynamic aim tracking
-            if (isDragging) {
-                const player = players[gameState.currentPlayer - 1];
-                aimGroup.position.copy(player.mesh.position);
-            }
-            
-            // [수정] 위성 카메라 추적 (Satellite View)
-            // 1. 타겟을 항상 지구 중심으로 고정 (지구가 제자리에서 도는 느낌)
-            controls.target.set(0, 0, 0);
+            if (isDragging) aimGroup.position.copy(players[gameState.currentPlayer - 1].mesh.position);
 
-            // 2. 카메라 추적 로직 (Follow Logic)
-            if (gameState.isFollowing && !gameState.isRotating) {
-    const activePlayer = players[gameState.currentPlayer - 1];
-    const upVec = activePlayer.mesh.position.clone().normalize();
-    const speed = activePlayer.body.velocity.length();
-    
-    // 🆕 상태에 따른 줌 레벨
-    let targetDist;
-    if (speed > 2) {
-        // 빠르게 움직일 때: 멀리서 (전체 보기)
-        targetDist = 18;
-    } else if (speed > 0.5) {
-        // 중간 속도: 중간 거리
-        targetDist = 12;
-    } else {
-        // 정지/조준 중: 가까이
-        targetDist = 8;
-    }
-    
-    const targetPos = upVec.multiplyScalar(targetDist);
-    const lerpSpeed = 0.06; // 부드러운 전환
-    camera.position.lerp(targetPos, lerpSpeed);
-}
-            
+            controls.target.set(0, 0, 0);
+            if (gameActive && gameState.isFollowing && !gameState.isRotating) {
+                const ap = players[gameState.currentPlayer - 1];
+                const upVec = ap.mesh.position.clone().normalize();
+                const spd   = ap.body.velocity.length();
+                const targetDist = spd > 2 ? 18 : spd > 0.5 ? 12 : 8;
+                camera.position.lerp(upVec.multiplyScalar(targetDist), 0.06);
+            }
             controls.update();
             renderer.render(scene, camera);
         }
 
-        // ==========================================
-        // WINDOW RESIZE
-        // ==========================================
+        // ★ 렌더링 즉시 시작 (타이틀 화면 뒤에서도 지구본이 보임) → 아래 BOOTSTRAP에서 호출
+        // animate();  ← 이 위치 중복 호출 제거
+
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+
         // ==========================================
-        // START GAME
+        // TITLE SCREEN + GAME START (H-3)
         // ==========================================
-        const loading = document.getElementById('loading');
-        
-        setTimeout(() => {
-            loading.classList.add('hidden');
-            animate();
-            
-            // Show first turn
+        let selectedDuration = 180;
+
+        window.setDuration = function(sec) {
+            selectedDuration = sec;
+            ['dur-1','dur-3','dur-5'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.style.background = 'rgba(255,255,255,0.15)';
+                el.style.color = 'white';
+                el.style.borderColor = 'rgba(255,255,255,0.4)';
+            });
+            const map = { 60: 'dur-1', 180: 'dur-3', 300: 'dur-5' };
+            const active = document.getElementById(map[sec]);
+            if (active) {
+                active.style.background = 'rgba(255,255,255,0.9)';
+                active.style.color = '#FF4757';
+                active.style.borderColor = 'white';
+            }
+        };
+
+        // Play 버튼 클릭 핸들러
+        window.startFromTitle = function() {
+            const btn = document.getElementById('btn-play');
+            if (btn && btn.disabled) return;
+
+            // biome 아직 로드 중이면 대기 표시 후 완료 시 자동 재호출
+            if (!biomeReady) {
+                if (btn) { btn.textContent = '⏳ Loading map...'; btn.disabled = true; }
+                // biomeImg.onload 에서 biomeReady=true 후 이 함수를 다시 호출
+                const prevCb = gameReadyCallback;
+                gameReadyCallback = () => {
+                    if (prevCb) prevCb();
+                    window.startFromTitle();
+                };
+                return;
+            }
+
+            // 타이틀 화면 제거
+            const ts = document.getElementById('title-screen');
+            if (ts) {
+                ts.style.transition = 'opacity 0.4s';
+                ts.style.opacity = '0';
+                setTimeout(() => { if (ts.parentNode) ts.parentNode.removeChild(ts); }, 450);
+            }
+
+            CONFIG.gameDuration = selectedDuration;
+            gameState.timeRemaining = selectedDuration;
+
+            // 타이머 UI 초기화
+            const m = Math.floor(selectedDuration / 60);
+            const s = selectedDuration % 60;
+            elements.timer.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+
+            // 게임 시작
+            gameActive = true;
+            lastSecond = Math.floor(clock.getElapsedTime());
+
+            elements.turnText.textContent = "Player 1's Turn";
             elements.turnIndicator.classList.add('show');
-            setTimeout(() => {
-                elements.turnIndicator.classList.remove('show');
-            }, 2000);
-        }, 1500);
+            setTimeout(() => elements.turnIndicator.classList.remove('show'), 2000);
+            setTimeout(startTurnTimer, 600);
+        };
+
+        function startTurnTimer() {
+            clearInterval(gameState._turnTimer);
+            let remaining = CONFIG.turnTimeLimit;
+            const countdown = document.getElementById('turn-countdown');
+            if (countdown) {
+                countdown.textContent = remaining;
+                countdown.style.color = '#2D3436';
+                countdown.style.display = 'flex';
+            }
+            gameState._turnTimer = setInterval(() => {
+                remaining--;
+                if (countdown) {
+                    countdown.textContent = remaining;
+                    if (remaining <= 10) {
+                        countdown.style.color = '#FF4757';
+                        countdown.style.transform = remaining % 2 === 0
+                            ? 'translateX(-50%) scale(1.15)'
+                            : 'translateX(-50%) scale(1.0)';
+                    } else {
+                        countdown.style.color = '#2D3436';
+                        countdown.style.transform = 'translateX(-50%) scale(1.0)';
+                    }
+                }
+                if (remaining <= 0) {
+                    clearInterval(gameState._turnTimer);
+                    if (countdown) {
+                        countdown.style.display = 'none';
+                        countdown.style.transform = 'translateX(-50%) scale(1.0)';
+                    }
+                    if (gameState.isPlanning) switchTurn();
+                }
+            }, 1000);
+        }
+
+        // ==========================================
+        // BOOTSTRAP: 로딩화면 숨기고 렌더링 시작
+        // ==========================================
+        // 타이틀 화면이 있으면 로딩 화면 즉시 숨김 (배경은 투명이라 지구가 보임)
+        const loadingEl = document.getElementById('loading');
+        if (loadingEl) {
+            // ★ B-2 수정: transition을 살려서 0.5s fade-out 후 display:none 처리
+            loadingEl.classList.add('hidden');
+            setTimeout(() => { if (loadingEl.parentNode) loadingEl.style.display = 'none'; }, 550);
+        }
+
+        // 렌더링 루프 즉시 시작 (타이틀 화면 뒤에서도 지구가 보임)
+        animate();
+
     </script>
 </body>
 </html>
