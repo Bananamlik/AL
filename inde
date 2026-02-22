@@ -1,0 +1,2086 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🌍 Globe Striker - Territory Battle</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=DM+Sans:wght@400;500;700;900&display=swap');
+        
+        :root {
+            --player1-color: #FF4757;
+            --player2-color: #5352ED;
+            --ocean: #67C7E3;
+            --forest: #72D27E;
+            --bg-primary: #FFF5F7;
+            --bg-dark: rgba(0, 0, 0, 0.7);
+            --text-dark: #2D3436;
+            --text-light: #636E72;
+            --white: #FFFFFF;
+            
+            --font-display: 'Fredoka One', cursive;
+            --font-body: 'DM Sans', sans-serif;
+            
+            --bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            user-select: none;
+            font-family: var(--font-body);
+            background: #0a0a1e;
+            position: relative;
+            touch-action: manipulation;
+        }
+        
+        #top-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.85));
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+        
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .player-avatar {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            border: 3px solid;
+            transition: all 0.3s var(--bounce);
+        }
+        
+        .player-avatar.p1 {
+            background: linear-gradient(135deg, var(--player1-color), #E84057);
+            border-color: var(--player1-color);
+        }
+        
+        .player-avatar.p2 {
+            background: linear-gradient(135deg, var(--player2-color), #3742FA);
+            border-color: var(--player2-color);
+        }
+        
+        .player-avatar.active {
+            transform: scale(1.15);
+            box-shadow: 0 0 20px currentColor;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 20px currentColor; }
+            50% { box-shadow: 0 0 35px currentColor; }
+        }
+        
+        .player-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .player-name {
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--text-dark);
+        }
+        
+        .player-territory {
+            font-size: 12px;
+            color: var(--text-light);
+            font-weight: 600;
+        }
+        
+        .game-timer {
+            text-align: center;
+        }
+        
+        .timer-label {
+            font-size: 10px;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .timer-value {
+            font-family: var(--font-display);
+            font-size: 24px;
+            color: var(--text-dark);
+        }
+        
+        #bottom-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            z-index: 100;
+        }
+        
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.2s var(--bounce);
+            touch-action: manipulation;
+        }
+        
+        .control-btn:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .control-btn:active {
+            transform: translateY(0) scale(0.95);
+        }
+        
+        .control-btn.primary {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--player1-color), #E84057);
+            color: white;
+            font-size: 32px;
+            box-shadow: 
+                0 6px 0 #C92A2A,
+                0 10px 25px rgba(255, 71, 87, 0.4);
+        }
+        
+        .control-btn.primary:hover {
+            box-shadow: 
+                0 8px 0 #C92A2A,
+                0 14px 30px rgba(255, 71, 87, 0.5);
+        }
+        
+        .control-btn.primary:active {
+            box-shadow: 
+                0 2px 0 #C92A2A,
+                0 6px 15px rgba(255, 71, 87, 0.4);
+            transform: translateY(4px) scale(0.95);
+        }
+        
+        .side-panel {
+            position: absolute;
+            top: 90px;
+            width: 280px;
+            max-height: calc(100vh - 200px);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            z-index: 90;
+            overflow-y: auto;
+        }
+        
+        #stats-panel {
+            left: 20px;
+        }
+        
+        #options-panel {
+            right: 20px;
+        }
+        
+        .panel-title {
+            font-family: var(--font-display);
+            font-size: 18px;
+            color: var(--text-dark);
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-light);
+            font-weight: 600;
+        }
+        
+        .stat-value {
+            font-size: 15px;
+            color: var(--text-dark);
+            font-weight: 700;
+        }
+        
+        .option-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+        }
+        
+        .option-label {
+            font-size: 14px;
+            color: var(--text-dark);
+            font-weight: 600;
+        }
+        
+        .toggle-switch {
+            width: 50px;
+            height: 28px;
+            background: #DDD;
+            border-radius: 14px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .toggle-switch.active {
+            background: var(--player1-color);
+        }
+        
+        .toggle-knob {
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            transition: transform 0.3s var(--bounce);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        
+        .toggle-switch.active .toggle-knob {
+            transform: translateX(22px);
+        }
+        
+        .volume-slider {
+            width: 100%;
+            height: 6px;
+            background: #DDD;
+            border-radius: 3px;
+            position: relative;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        
+        .volume-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--player1-color), var(--player2-color));
+            border-radius: 3px;
+            width: 70%;
+            transition: width 0.1s;
+        }
+        
+        #turn-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 30px 50px;
+            border-radius: 20px;
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        
+        #turn-indicator.show {
+            opacity: 1;
+            animation: bounceIn 0.6s var(--bounce);
+        }
+        
+        @keyframes bounceIn {
+            0% { transform: translate(-50%, -50%) scale(0.3); }
+            50% { transform: translate(-50%, -50%) scale(1.1); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        .turn-text {
+            font-family: var(--font-display);
+            font-size: 48px;
+            color: white;
+            text-align: center;
+            text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+        
+        #game-over {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 300;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #game-over.show {
+            display: flex;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .game-over-content {
+            background: white;
+            border-radius: 30px;
+            padding: 50px;
+            text-align: center;
+            max-width: 500px;
+            animation: slideUp 0.6s var(--bounce);
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .game-over-title {
+            font-family: var(--font-display);
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        .game-over-winner {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 30px;
+        }
+        
+        .game-over-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 30px;
+        }
+        
+        .final-stat {
+            text-align: center;
+        }
+        
+        .final-stat-label {
+            font-size: 14px;
+            color: var(--text-light);
+            margin-bottom: 8px;
+        }
+        
+        .final-stat-value {
+            font-family: var(--font-display);
+            font-size: 32px;
+        }
+        
+        .restart-btn {
+            background: linear-gradient(135deg, var(--player1-color), #E84057);
+            color: white;
+            border: none;
+            padding: 18px 50px;
+            border-radius: 50px;
+            font-family: var(--font-display);
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #C92A2A;
+            transition: all 0.2s;
+        }
+        
+        .restart-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 0 #C92A2A;
+        }
+        
+        .restart-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #C92A2A;
+        }
+        
+        #power-gauge {
+            position: absolute;
+            bottom: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 95;
+            pointer-events: none;
+        }
+        
+        #power-gauge.visible {
+            opacity: 1;
+        }
+        
+        .gauge-label {
+            text-align: center;
+            font-weight: 700;
+            font-size: 12px;
+            color: var(--text-dark);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .gauge-bar {
+            height: 16px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 50px;
+            overflow: hidden;
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        
+        .gauge-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #72D27E 0%, #FFD98E 50%, #FF4757 100%);
+            border-radius: 50px;
+            transition: width 0.1s;
+        }
+        
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0a0a1e;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+        
+        #loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #FF4757;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            font-family: var(--font-display);
+            font-size: 24px;
+            color: white;
+        }
+        
+        .mode-btn {
+            padding: 9px 20px;
+            border-radius: 30px;
+            border: 1.5px solid rgba(255,255,255,0.4);
+            font-family: 'Fredoka One', cursive;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: white;
+            background: rgba(255,255,255,0.15);
+        }
+        .mode-btn:hover {
+            transform: translateY(-2px);
+            background: rgba(255,255,255,0.25);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        #btn-play:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 0 #C92A2A, 0 14px 30px rgba(255,71,87,0.5) !important;
+        }
+        #btn-play:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #C92A2A !important;
+        }
+        
+        .territory-bar-wrap {
+            width: 120px;
+            height: 5px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 3px;
+        }
+        .territory-bar {
+            height: 100%;
+            width: 0%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+        .territory-bar.p1 { background: var(--player1-color); }
+        .territory-bar.p2 { background: var(--player2-color); }
+        
+        .ink-bar-wrap {
+            width: 120px; height: 4px;
+            background: rgba(0,0,0,0.12);
+            border-radius: 3px; overflow: hidden; margin-top: 3px;
+        }
+        .ink-bar {
+            height: 100%; width: 100%;
+            border-radius: 3px;
+            transition: width 0.2s ease, background 0.3s;
+        }
+        .ink-bar.p1 { background: linear-gradient(90deg,#FF4757,#FFB347); }
+        .ink-bar.p2 { background: linear-gradient(90deg,#5352ED,#00C8FF); }
+        .ink-label { font-size: 10px; color: var(--text-light); font-weight: 600; margin-top:2px; }
+        
+        .help-row {
+            display: flex;
+            gap: 10px;
+            font-size: 13px;
+            color: #2D3436;
+            line-height: 1.5;
+            margin-bottom: 10px;
+            align-items: flex-start;
+        }
+        
+        @media (max-width: 768px) {
+            .side-panel {
+                width: calc(100% - 40px);
+                max-width: 350px;
+            }
+            
+            #stats-panel, #options-panel {
+                left: 50%;
+                transform: translateX(-50%);
+                display: none;
+            }
+            
+            #stats-panel.show, #options-panel.show {
+                display: block;
+            }
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
+            }
+        }
+    </script>
+</head>
+<body>
+    <!-- Title / Mode Selection Screen -->
+    <div id="title-screen" style="
+        position: fixed; top:0; left:0; width:100%; height:100%;
+        background: linear-gradient(135deg, rgba(255,71,87,0.45) 0%, rgba(83,82,237,0.45) 100%);
+        z-index: 500;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 0;
+        font-family: 'Fredoka One', cursive;
+    ">
+        <div style="
+            background: rgba(255,255,255,0.10);
+            border: 1.5px solid rgba(255,255,255,0.30);
+            border-radius: 32px;
+            padding: 44px 56px 40px;
+            display: flex; flex-direction: column;
+            align-items: center; gap: 22px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+        ">
+            <div style="font-size:64px; line-height:1;">🌍</div>
+            <div style="font-size:46px; color: white; text-shadow: 0 3px 12px rgba(0,0,0,0.4); letter-spacing:1px;">Globe Striker</div>
+            <div style="font-size:13px; color:rgba(255,255,255,0.8); font-family:'DM Sans',sans-serif; font-weight:600; letter-spacing:3px; text-transform:uppercase;">Territory Battle</div>
+
+            <div style="display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:4px;">
+                <div style="font-size:13px; color:rgba(255,255,255,0.7); font-family:'DM Sans',sans-serif; letter-spacing:1px; text-transform:uppercase;">Game Duration</div>
+                <div style="display:flex; gap:10px;">
+                    <button class="mode-btn" id="dur-1" onclick="setDuration(60)">1 min</button>
+                    <button class="mode-btn" id="dur-3" onclick="setDuration(180)" style="background:rgba(255,255,255,0.9);color:#FF4757;border-color:white;">3 min</button>
+                    <button class="mode-btn" id="dur-5" onclick="setDuration(300)">5 min</button>
+                </div>
+            </div>
+
+            <button id="btn-play" onclick="startFromTitle()" style="
+                margin-top:4px;
+                background: linear-gradient(135deg, #FF4757, #E84057);
+                color: white;
+                border: none;
+                padding: 18px 60px;
+                border-radius: 50px;
+                font-family: 'Fredoka One', cursive;
+                font-size: 22px;
+                cursor: pointer;
+                box-shadow: 0 5px 0 #C92A2A, 0 10px 25px rgba(255,71,87,0.5);
+                transition: all 0.2s;
+                letter-spacing: 0.5px;
+            ">▶ Play (2P Local)</button>
+
+            <div style="font-size:12px; color:rgba(255,255,255,0.55); font-family:'DM Sans',sans-serif; text-align:center; max-width:280px; line-height:1.5;">
+                육지 위에 폐곡선을 그려 영역을 점령하세요!
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Screen -->
+    <div id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading Globe Striker...</div>
+    </div>
+    
+    <!-- Top Bar -->
+    <div id="top-bar">
+        <div class="player-info">
+            <div class="player-avatar p1 active" id="avatar-p1">🔴</div>
+            <div class="player-stats">
+                <div class="player-name">Player 1</div>
+                <div class="player-territory">Territory: <span id="territory-p1">0.00%</span></div>
+                <div class="territory-bar-wrap">
+                    <div class="territory-bar p1" id="territory-bar-p1"></div>
+                </div>
+                <div class="ink-bar-wrap">
+                    <div class="ink-bar p1" id="ink-bar-p1"></div>
+                </div>
+                <div class="ink-label">🖊️ <span id="ink-p1">100</span></div>
+            </div>
+        </div>
+        
+        <div class="game-timer">
+            <div class="timer-label">Time Left</div>
+            <div class="timer-value" id="timer">3:00</div>
+        </div>
+        
+        <div class="player-info">
+            <div class="player-stats" style="text-align: right;">
+                <div class="player-name">Player 2</div>
+                <div class="player-territory">Territory: <span id="territory-p2">0.00%</span></div>
+                <div class="territory-bar-wrap">
+                    <div class="territory-bar p2" id="territory-bar-p2"></div>
+                </div>
+                <div class="ink-bar-wrap" style="margin-left:auto;">
+                    <div class="ink-bar p2" id="ink-bar-p2"></div>
+                </div>
+                <div class="ink-label" style="text-align:right;">🖊️ <span id="ink-p2">100</span></div>
+            </div>
+            <div class="player-avatar p2" id="avatar-p2">🔵</div>
+        </div>
+    </div>
+    
+    <!-- Stats Panel -->
+    <div id="stats-panel" class="side-panel" style="display:none;">
+        <div class="panel-title">📊 Game Stats</div>
+        <div class="stat-item">
+            <span class="stat-label">Turn</span>
+            <span class="stat-value" id="stat-turn">1</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">P1 Shots</span>
+            <span class="stat-value" id="stat-p1-shots">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">P2 Shots</span>
+            <span class="stat-value" id="stat-p2-shots">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">P1 Loops 🔄</span>
+            <span class="stat-value" id="stat-p1-loops" style="color:var(--player1-color)">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">P2 Loops 🔄</span>
+            <span class="stat-value" id="stat-p2-loops" style="color:var(--player2-color)">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">P1 Distance</span>
+            <span class="stat-value" id="stat-p1-distance">0 km</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">P2 Distance</span>
+            <span class="stat-value" id="stat-p2-distance">0 km</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Collisions</span>
+            <span class="stat-value" id="stat-collisions">0</span>
+        </div>
+    </div>
+    
+    <!-- Options Panel -->
+    <div id="options-panel" class="side-panel" style="display:none;">
+        <div class="panel-title">⚙️ Settings</div>
+        
+        <div class="option-row">
+            <span class="option-label">🔊 Sound</span>
+            <div class="toggle-switch active" id="toggle-sound">
+                <div class="toggle-knob"></div>
+            </div>
+        </div>
+        
+        <div class="option-row" style="flex-direction: column; align-items: flex-start;">
+            <span class="option-label">🎵 Volume</span>
+            <div class="volume-slider" id="volume-slider">
+                <div class="volume-fill" id="volume-fill"></div>
+            </div>
+        </div>
+        
+        <div class="option-row">
+            <span class="option-label">🌀 Camera Rotation</span>
+            <div class="toggle-switch active" id="toggle-rotation">
+                <div class="toggle-knob"></div>
+            </div>
+        </div>
+        
+        <div class="option-row">
+            <span class="option-label">📍 Show Trails</span>
+            <div class="toggle-switch active" id="toggle-trails">
+                <div class="toggle-knob"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Power Gauge -->
+    <div id="power-gauge">
+        <div class="gauge-label">SHOT POWER</div>
+        <div class="gauge-bar">
+            <div class="gauge-fill" id="power-fill"></div>
+        </div>
+    </div>
+    
+    <!-- Bottom Controls -->
+    <div id="bottom-controls">
+        <button class="control-btn" id="btn-stats" title="Stats">📊</button>
+        <button class="control-btn" id="btn-options" title="Options">⚙️</button>
+        <button class="control-btn primary" id="btn-shoot" title="End Turn">🚀</button>
+        <button class="control-btn" id="btn-reset" title="Reset">🔄</button>
+        <button class="control-btn" id="btn-help" title="Help">❓</button>
+    </div>
+    
+    <!-- Turn Countdown -->
+    <div id="turn-countdown" style="
+        position: fixed; top: 80px; left: 50%;
+        transform: translateX(-50%);
+        font-family: 'Fredoka One', cursive;
+        font-size: 28px;
+        background: rgba(255,255,255,0.9);
+        backdrop-filter: blur(6px);
+        border-radius: 50%;
+        width: 54px; height: 54px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 95;
+        transition: color 0.3s, transform 0.2s;
+    ">30</div>
+    
+    <!-- Turn Indicator -->
+    <div id="turn-indicator">
+        <div class="turn-text" id="turn-text">Player 1's Turn</div>
+    </div>
+    
+    <!-- Game Over -->
+    <div id="game-over">
+        <div class="game-over-content">
+            <div class="game-over-title">🎉 Game Over!</div>
+            <div class="game-over-winner" id="winner-text">Player 1 Wins!</div>
+            <div class="game-over-stats">
+                <div class="final-stat">
+                    <div class="final-stat-label">Player 1</div>
+                    <div class="final-stat-value" style="color: var(--player1-color);" id="final-p1">45%</div>
+                </div>
+                <div class="final-stat">
+                    <div class="final-stat-label">Player 2</div>
+                    <div class="final-stat-value" style="color: var(--player2-color);" id="final-p2">38%</div>
+                </div>
+            </div>
+            <button class="restart-btn" onclick="location.reload()">Play Again</button>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" style="
+        display:none; position:fixed; inset:0;
+        background:rgba(0,0,0,0.8); z-index:600;
+        align-items:center; justify-content:center;
+    ">
+        <div style="
+            background:white; border-radius:24px; padding:36px 40px;
+            max-width:420px; width:90%; font-family:'DM Sans',sans-serif;
+            animation: slideUp 0.4s cubic-bezier(0.68,-0.55,0.265,1.55);
+        ">
+            <div style="font-family:'Fredoka One',cursive; font-size:26px; color:#2D3436; margin-bottom:20px; text-align:center;">
+                🌍 Globe Striker — 규칙
+            </div>
+            <div class="help-row">🖱️ <b>공을 드래그</b>해서 발사 방향과 세기를 조준합니다 (당긴 반대 방향으로 발사)</div>
+            <div class="help-row">🗺️ 공이 <b>육지 위</b>를 지날 때만 경로(트레일)가 생깁니다. 바다에선 경로가 초기화됩니다.</div>
+            <div class="help-row">🔄 자신의 트레일로 <b>폐곡선을 완성</b>하면 그 안의 육지를 모두 점령합니다! (한 번의 연속 경로로도 가능)</div>
+            <div class="help-row">⚔️ 상대 영역 위로 폐곡선을 그리면 <b>완전 탈취</b>됩니다</div>
+            <div class="help-row">🌀 <b>코리올리 효과</b>로 투사체가 지구 자전에 의해 휩니다 (고위도 = 강함)</div>
+            <div class="help-row">⏱️ 제한 시간 종료 시 <b>가장 넓은 영역</b>을 가진 플레이어 우승</div>
+            <div class="help-row">💡 더블클릭으로 카메라가 현재 플레이어를 다시 따라갑니다</div>
+            <button onclick="document.getElementById('help-modal').style.display='none'" style="
+                margin-top:20px; width:100%; padding:14px;
+                background:linear-gradient(135deg,#FF4757,#E84057);
+                color:white; border:none; border-radius:16px;
+                font-family:'Fredoka One',cursive; font-size:18px; cursor:pointer;
+            ">확인</button>
+        </div>
+    </div>
+    
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import * as CANNON from 'cannon-es';
+
+        // ==========================================
+        // GAME CONFIGURATION
+        // ==========================================
+        const CONFIG = {
+            earthRadius:       4,
+            playerRadius:      0.12,
+            gravity:           120,
+            mass:              5,
+            damping:           0.55,
+            shootForce:        135,
+            coriolisFactor:    3.5,
+
+            gameDuration:      180,
+            turnTimeLimit:     30,
+
+            trailSpacing:      0.08,
+            trailSpeedThreshold: 0.3,
+            captureRadius:     1.0,
+            minLoopLength:     8,
+            LAND_THRESHOLD:    25,
+
+            inkMax:            100,
+            inkLandCost:       0.4,
+            inkOceanPenalty:   20,
+            inkRechargePerTurn: 15,
+        };
+
+        // ==========================================
+        // GAME STATE
+        // ==========================================
+        const gameState = {
+            currentPlayer: 1,
+            turn: 1,
+            timeRemaining: CONFIG.gameDuration,
+            isPlanning: true,
+            hasShot: false,
+            player1: { territory: 0, shots: 0, distance: 0, loops: 0, ink: 100 },
+            player2: { territory: 0, shots: 0, distance: 0, loops: 0, ink: 100 },
+            collisions: 0,
+            isRotating: false,
+            isFollowing: true,
+            settings: { soundEnabled: true, volume: 0.7, cameraRotation: true, showTrails: true }
+        };
+
+        // ==========================================
+        // SOUND SYSTEM
+        // ==========================================
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            if (!gameState.settings.soundEnabled) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+
+            if (type === 'charge') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(400, now + 0.1);
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'shoot') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now); osc.stop(now + 0.2);
+            } else if (type === 'turn') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'capture') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.35);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now); osc.stop(now + 0.5);
+            } else if (type === 'steal') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(660, now);
+                osc.frequency.exponentialRampToValueAtTime(220, now + 0.4);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
+            }
+        }
+
+        // ==========================================
+        // SCENE SETUP
+        // ==========================================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1e);
+
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 12);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        const canvas = renderer.domElement;
+        canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;display:block;';
+        document.body.insertBefore(canvas, document.body.firstChild);
+
+        // ==========================================
+        // STARFIELD
+        // ==========================================
+        (function addStars() {
+            const geo = new THREE.BufferGeometry();
+            const n = 2000;
+            const pos = new Float32Array(n * 3);
+            for (let i = 0; i < n * 3; i++) pos[i] = (Math.random() - 0.5) * 400;
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.4, sizeAttenuation: true })));
+        })();
+
+        // ==========================================
+        // LIGHTING
+        // ==========================================
+        scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(5, 10, 7);
+        scene.add(dirLight);
+
+        // ==========================================
+        // PHYSICS WORLD
+        // ==========================================
+        const world = new CANNON.World();
+        world.gravity.set(0, 0, 0);
+        world.broadphase = new CANNON.NaiveBroadphase();
+        world.solver.iterations = 20;
+
+        const physicsMaterial = new CANNON.Material('physics');
+        world.addContactMaterial(new CANNON.ContactMaterial(
+            physicsMaterial, physicsMaterial,
+            { friction: 0.3, restitution: 0.2 }
+        ));
+
+        // ==========================================
+        // EARTH
+        // ==========================================
+        const earthBody = new CANNON.Body({
+            mass: 0,
+            shape: new CANNON.Sphere(CONFIG.earthRadius),
+            material: physicsMaterial
+        });
+        world.addBody(earthBody);
+
+        const earthTexture = new THREE.TextureLoader().load(
+            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg'
+        );
+
+        const earthMaterial = new THREE.ShaderMaterial({
+            uniforms: { map: { value: earthTexture } },
+            vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+            fragmentShader: `
+                uniform sampler2D map; varying vec2 vUv;
+                void main(){
+                    vec4 t = texture2D(map, vUv);
+                    vec3 color = vec3(0.4, 0.7, 1.0);
+                    float br = t.r + t.g + t.b;
+                    if(t.b <= t.r + 0.098){
+                        if(br > 2.1)      color = vec3(0.94, 0.96, 0.97);
+                        else if(t.r>t.g)  color = vec3(1.0,  0.85, 0.56);
+                        else              color = vec3(0.45, 0.82, 0.49);
+                    }
+                    gl_FragColor = vec4(color, 1.0);
+                }
+            `
+        });
+
+        const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(CONFIG.earthRadius, 64, 64), earthMaterial);
+        scene.add(earthMesh);
+        earthMesh.add(new THREE.Mesh(
+            new THREE.SphereGeometry(CONFIG.earthRadius + 0.08, 64, 64),
+            new THREE.MeshBasicMaterial({ color: 0x2D3436, side: THREE.BackSide })
+        ));
+
+        // ==========================================
+        // TERRITORY OVERLAY SYSTEM
+        // ==========================================
+        let biomeData = null, biomeWidth = 0, biomeHeight = 0;
+        let ownershipMap = null;
+        let totalLandPixels = 0;
+        const playerLandPixels = [0, 0];
+
+        let overlayCanvas, overlayCtx, overlayTexture, overlayMesh;
+
+        const TERR_COLOR = [
+            { r: 255, g: 71,  b: 87,  a: 160 },
+            { r: 83,  g: 82,  b: 237, a: 160 },
+        ];
+
+        function isLandPixelSingle(gx, gy) {
+            if (!biomeData) return true;
+            if (gx < 0 || gx >= biomeWidth || gy < 0 || gy >= biomeHeight) return false;
+            const idx = (gy * biomeWidth + gx) * 4;
+            const brightness = (biomeData[idx] + biomeData[idx+1] + biomeData[idx+2]) / 3;
+            return brightness < 80;
+        }
+
+        function isLandPixel(gx, gy) {
+            if (!biomeData) return true;
+            let landCount = 0, total = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const x = gx + dx, y = gy + dy;
+                    if (x < 0 || x >= biomeWidth || y < 0 || y >= biomeHeight) continue;
+                    const idx = (y * biomeWidth + x) * 4;
+                    total++;
+                    const brightness = (biomeData[idx] + biomeData[idx+1] + biomeData[idx+2]) / 3;
+                    if (brightness < 80) landCount++;
+                }
+            }
+            return landCount > total / 2;
+        }
+
+        function isLandAtUV(u, v) {
+            if (!biomeData) return true;
+            const gx = Math.floor(u * (biomeWidth - 1));
+            const gy = Math.floor(v * (biomeHeight - 1));
+            return isLandPixel(gx, gy);
+        }
+
+        function getUV(pos) {
+            const n = pos.clone().normalize();
+            const u = ((Math.atan2(n.z, -n.x) / (2 * Math.PI)) + 1.0) % 1.0;
+            const v = 0.5 - Math.asin(Math.max(-1, Math.min(1, n.y))) / Math.PI;
+            return { u, v };
+        }
+
+        function getBiome(pos) {
+            const { u, v } = getUV(pos);
+            return isLandAtUV(u, v) ? 'LAND' : 'OCEAN';
+        }
+
+        function initOverlay() {
+            overlayCanvas = document.createElement('canvas');
+            overlayCanvas.width  = biomeWidth;
+            overlayCanvas.height = biomeHeight;
+            overlayCtx = overlayCanvas.getContext('2d', { willReadFrequently: true });
+
+            ownershipMap = new Uint8Array(biomeWidth * biomeHeight);
+
+            totalLandPixels = 0;
+            (function countLandAsync() {
+                const CHUNK = 80000;
+                let i = 0, count = 0;
+                function step() {
+                    const end = Math.min(i + CHUNK, biomeWidth * biomeHeight);
+                    for (; i < end; i++) {
+                        const px = i % biomeWidth, py = Math.floor(i / biomeWidth);
+                        if (isLandPixelSingle(px, py)) count++;
+                    }
+                    if (i < biomeWidth * biomeHeight) {
+                        requestAnimationFrame(step);
+                    } else {
+                        totalLandPixels = count;
+                        console.log(`[GlobeStriker] totalLandPixels 계산 완료: ${count}`);
+                        updateTerritoryScores();
+                    }
+                }
+                requestAnimationFrame(step);
+            })();
+
+            overlayTexture = new THREE.CanvasTexture(overlayCanvas);
+            overlayMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(CONFIG.earthRadius + 0.012, 64, 64),
+                new THREE.MeshBasicMaterial({
+                    map: overlayTexture,
+                    transparent: true,
+                    depthWrite: false,
+                    opacity: 1.0,
+                })
+            );
+            scene.add(overlayMesh);
+        }
+
+        function isBorderPixel(oi) {
+            const gx = oi % biomeWidth, gy = Math.floor(oi / biomeWidth);
+            const owner = ownershipMap[oi];
+            for (const [dx, dy] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+                const nx = gx + dx, ny = gy + dy;
+                if (nx < 0 || nx >= biomeWidth || ny < 0 || ny >= biomeHeight) continue;
+                if (ownershipMap[ny * biomeWidth + nx] !== owner) return true;
+            }
+            return false;
+        }
+
+        function repaintRegion(minX, minY, maxX, maxY) {
+            const w = maxX - minX + 1, h = maxY - minY + 1;
+            const imgData = overlayCtx.getImageData(minX, minY, w, h);
+            const data = imgData.data;
+            for (let ly = 0; ly < h; ly++) {
+                for (let lx = 0; lx < w; lx++) {
+                    const oi = (minY + ly) * biomeWidth + (minX + lx);
+                    const owner = ownershipMap[oi];
+                    const pi = (ly * w + lx) * 4;
+                    if (owner > 0) {
+                        const c = TERR_COLOR[owner - 1];
+                        const border = isBorderPixel(oi);
+                        data[pi]   = c.r;
+                        data[pi+1] = c.g;
+                        data[pi+2] = c.b;
+                        data[pi+3] = border ? 220 : c.a;
+                    } else {
+                        data[pi+3] = 0;
+                    }
+                }
+            }
+            overlayCtx.putImageData(imgData, minX, minY);
+            overlayTexture.needsUpdate = true;
+        }
+
+        function repaintOverlay() {
+            repaintRegion(0, 0, biomeWidth - 1, biomeHeight - 1);
+        }
+
+        function updateTerritoryScores() {
+            if (totalLandPixels === 0) return;
+            gameState.player1.territory = playerLandPixels[0] / totalLandPixels * 100;
+            gameState.player2.territory = playerLandPixels[1] / totalLandPixels * 100;
+            const p1pct = gameState.player1.territory;
+            const p2pct = gameState.player2.territory;
+            elements.territoryP1.textContent = `${p1pct.toFixed(2)}%`;
+            elements.territoryP2.textContent = `${p2pct.toFixed(2)}%`;
+            const MAX_DISPLAY = 40;
+            const bar1 = document.getElementById('territory-bar-p1');
+            const bar2 = document.getElementById('territory-bar-p2');
+            if (bar1) bar1.style.width = `${Math.min(100, p1pct / MAX_DISPLAY * 100)}%`;
+            if (bar2) bar2.style.width = `${Math.min(100, p2pct / MAX_DISPLAY * 100)}%`;
+        }
+
+        function normalizeUVs(uvPoints) {
+            if (uvPoints.length === 0) return uvPoints;
+            const ref = uvPoints[0].u;
+            return uvPoints.map(p => {
+                let u = p.u;
+                if (u - ref >  0.5) u -= 1.0;
+                if (u - ref < -0.5) u += 1.0;
+                return { u, v: p.v };
+            });
+        }
+
+        function createTerritoryArea(points, playerIdx) {
+            if (points.length < 3 || !biomeData || !ownershipMap) return;
+
+            const otherIdx = playerIdx === 0 ? 1 : 0;
+
+            const rawUVs = points.map(p => getUV(p));
+            const normUVs = normalizeUVs(rawUVs);
+            const pixPoints = normUVs.map(({ u, v }) => ({
+                x: Math.round(((u % 1.0 + 1.0) % 1.0) * (biomeWidth - 1)),
+                y: Math.round(Math.max(0, Math.min(1, v)) * (biomeHeight - 1))
+            }));
+
+            let minX = biomeWidth, maxX = 0, minY = biomeHeight, maxY = 0;
+            pixPoints.forEach(p => {
+                minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+            });
+            minX = Math.max(0, minX - 1); minY = Math.max(0, minY - 1);
+            maxX = Math.min(biomeWidth - 1, maxX + 1);
+            maxY = Math.min(biomeHeight - 1, maxY + 1);
+            const w = maxX - minX + 1;
+            const h = maxY - minY + 1;
+            if (w <= 0 || h <= 0) return;
+
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = w; maskCanvas.height = h;
+            const maskCtx = maskCanvas.getContext('2d');
+            maskCtx.fillStyle = 'white';
+            maskCtx.beginPath();
+            pixPoints.forEach((p, i) => {
+                const lx = p.x - minX, ly = p.y - minY;
+                if (i === 0) maskCtx.moveTo(lx, ly);
+                else maskCtx.lineTo(lx, ly);
+            });
+            maskCtx.closePath();
+            maskCtx.fill();
+            const maskData = maskCtx.getImageData(0, 0, w, h).data;
+
+            let newCapture = 0, stolen = 0;
+            for (let ly = 0; ly < h; ly++) {
+                for (let lx = 0; lx < w; lx++) {
+                    const mi = (ly * w + lx) * 4;
+                    if (maskData[mi] < 128) continue;
+
+                    const gx = minX + lx, gy = minY + ly;
+                    if (!isLandPixelSingle(gx, gy)) continue;
+
+                    const oi   = gy * biomeWidth + gx;
+                    const prev = ownershipMap[oi];
+
+                    if (prev === 0) {
+                        ownershipMap[oi] = playerIdx + 1;
+                        playerLandPixels[playerIdx]++;
+                        newCapture++;
+                    } else if (prev === otherIdx + 1) {
+                        ownershipMap[oi] = playerIdx + 1;
+                        playerLandPixels[otherIdx]--;
+                        playerLandPixels[playerIdx]++;
+                        newCapture++;
+                        stolen++;
+                    }
+                }
+            }
+
+            if (newCapture <= 0) return;
+
+            repaintRegion(minX, minY, maxX, maxY);
+            updateTerritoryScores();
+
+            if (playerIdx === 0) gameState.player1.loops++;
+            else                 gameState.player2.loops++;
+            updateStats();
+
+            const pct = (newCapture / totalLandPixels * 100).toFixed(2);
+            const mid = points[Math.floor(points.length / 2)];
+            let msg = `+${pct}%`;
+            if (stolen > 0) {
+                msg = `⚔️ 탈취! +${pct}%  (${(stolen / totalLandPixels * 100).toFixed(2)}% 강탈)`;
+                playSound('steal');
+                showFloatingText(msg, mid, '#FFD700');
+            } else {
+                playSound('capture');
+                showFloatingText(msg, mid, '#72D27E');
+            }
+        }
+
+        // ==========================================
+        // BIOME TEXTURE LOAD
+        // ==========================================
+        let biomeReady = false, gameReadyCallback = null;
+
+        const biomeImg = new Image();
+        biomeImg.crossOrigin = 'Anonymous';
+        biomeImg.src = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_specular_2048.jpg';
+        biomeImg.onload = () => {
+            try {
+                const c = document.createElement('canvas');
+                biomeWidth = c.width = biomeImg.width;
+                biomeHeight = c.height = biomeImg.height;
+                const ctx = c.getContext('2d');
+                ctx.drawImage(biomeImg, 0, 0);
+                biomeData = ctx.getImageData(0, 0, biomeWidth, biomeHeight).data;
+                initOverlay();
+            } catch(e) {
+                console.warn('[GlobeStriker] biome CORS 오류 — 육지/바다 구분 불가:', e);
+            }
+            biomeReady = true;
+            if (gameReadyCallback) { const cb = gameReadyCallback; gameReadyCallback = null; cb(); }
+        };
+        biomeImg.onerror = () => {
+            console.warn('[GlobeStriker] biome 이미지 로드 실패 — 모든 픽셀을 육지로 처리');
+            biomeReady = true;
+            if (gameReadyCallback) { const cb = gameReadyCallback; gameReadyCallback = null; cb(); }
+        };
+
+        // ==========================================
+        // PLAYERS
+        // ==========================================
+        const players = [];
+        function createPlayer(colorHex, position) {
+            const body = new CANNON.Body({
+                mass: CONFIG.mass,
+                shape: new CANNON.Sphere(CONFIG.playerRadius),
+                material: physicsMaterial,
+                linearDamping: CONFIG.damping,
+                angularDamping: 0.5,
+            });
+            body.position.copy(position);
+            world.addBody(body);
+
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(CONFIG.playerRadius, 32, 32),
+                new THREE.MeshToonMaterial({ color: colorHex })
+            );
+            scene.add(mesh);
+
+            const hitBox = new THREE.Mesh(
+                new THREE.SphereGeometry(CONFIG.playerRadius * 2.5, 16, 16),
+                new THREE.MeshBasicMaterial({ visible: false })
+            );
+            mesh.add(hitBox);
+
+            return { body, mesh, hitBox,
+                lastTrailPos: new THREE.Vector3(position.x, position.y, position.z),
+                currentSegment: [],
+                landSegments:   [],
+            };
+        }
+
+        players.push(createPlayer(0xFF4757, new CANNON.Vec3(0, CONFIG.earthRadius + CONFIG.playerRadius + 0.05, 0)));
+        players.push(createPlayer(0x5352ED, new CANNON.Vec3(0, -(CONFIG.earthRadius + CONFIG.playerRadius + 0.05), 0)));
+
+        // ==========================================
+        // CLOUDS
+        // ==========================================
+        const cloudGroup = new THREE.Group();
+        scene.add(cloudGroup);
+        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.6 });
+        for (let i = 0; i < 25; i++) {
+            const cloud = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2 + Math.random() * 0.15, 0), cloudMat);
+            const radius = CONFIG.earthRadius + 0.6 + Math.random() * 0.5;
+            cloud.position.setFromSphericalCoords(radius, Math.random() * Math.PI, Math.random() * Math.PI * 2);
+            cloud.lookAt(0, 0, 0);
+            cloud.scale.set(1 + Math.random() * 0.3, 0.5 + Math.random() * 0.2, 0.7);
+            cloudGroup.add(cloud);
+        }
+
+        // ==========================================
+        // TRAIL SYSTEMS
+        // ==========================================
+        const TRAIL_MAX = 2000;
+
+        function createTrailSystem(color) {
+            const geo = new THREE.SphereGeometry(0.03, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75 });
+            const mesh = new THREE.InstancedMesh(geo, mat, TRAIL_MAX);
+            mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            scene.add(mesh);
+            return { mesh, count: 0, dummy: new THREE.Object3D() };
+        }
+        const trail1 = createTrailSystem(0xFF4757);
+        const trail2 = createTrailSystem(0x5352ED);
+        const trails = [trail1, trail2];
+
+        // ==========================================
+        // LOOP DETECTION (개선 버전)
+        // ==========================================
+        function checkLoop(playerIdx, newPos) {
+            const player = players[playerIdx];
+            const currSeg = player.currentSegment;
+            const prevSegs = player.landSegments;
+
+            // 동일 세그먼트 내 루프 검사 (마지막 점 제외)
+            if (currSeg.length >= 3) {
+                for (let i = 0; i < currSeg.length - 1; i++) {
+                    if (newPos.distanceTo(currSeg[i]) < CONFIG.captureRadius) {
+                        const loopPath = currSeg.slice(i);
+                        createTerritoryArea(loopPath, playerIdx);
+                        player.landSegments = [];
+                        player.currentSegment = [];
+                        return true;
+                    }
+                }
+            }
+
+            // 이전 세그먼트와 연결 검사
+            for (let si = 0; si < prevSegs.length; si++) {
+                const seg = prevSegs[si];
+                for (let pi = 0; pi < seg.length; pi++) {
+                    if (newPos.distanceTo(seg[pi]) < CONFIG.captureRadius) {
+                        const loopPath = [];
+                        for (let k = pi; k < seg.length; k++) loopPath.push(seg[k]);
+                        for (let si2 = si + 1; si2 < prevSegs.length; si2++) {
+                            prevSegs[si2].forEach(p => loopPath.push(p));
+                        }
+                        currSeg.forEach(p => loopPath.push(p));
+                        createTerritoryArea(loopPath, playerIdx);
+                        player.landSegments = [];
+                        player.currentSegment = [];
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // ==========================================
+        // ADD TRAIL + 잉크 시스템
+        // ==========================================
+        function addTrail(idx, pos) {
+            const player  = players[idx];
+            const psState = idx === 0 ? gameState.player1 : gameState.player2;
+            const onLand  = getBiome(pos) === 'LAND';
+
+            if (!onLand) {
+                if (player.currentSegment.length > 0) {
+                    player.landSegments.push([...player.currentSegment]);
+                    player.currentSegment = [];
+
+                    psState.ink = Math.max(0, psState.ink - CONFIG.inkOceanPenalty);
+                    updateInkUI();
+
+                    const mat = trails[idx].mesh.material;
+                    mat.opacity = 0.15;
+                    setTimeout(() => { mat.opacity = 0.75; }, 500);
+                }
+                return;
+            }
+
+            if (psState.ink <= 0) return;
+
+            psState.ink = Math.max(0, psState.ink - CONFIG.inkLandCost);
+            updateInkUI();
+
+            const sys = trails[idx];
+            const ringIdx = sys.count % TRAIL_MAX;
+            sys.dummy.position.copy(pos);
+            sys.dummy.position.setLength(CONFIG.earthRadius + 0.02);
+            sys.dummy.lookAt(0, 0, 0);
+            sys.dummy.rotateZ(Math.random() * Math.PI);
+            const s = 0.8 + Math.random() * 0.4;
+            sys.dummy.scale.set(s, s, 1);
+            sys.dummy.updateMatrix();
+            sys.mesh.setMatrixAt(ringIdx, sys.dummy.matrix);
+            sys.mesh.instanceMatrix.needsUpdate = true;
+            sys.count++;
+
+            player.currentSegment.push(pos.clone());
+
+            // 루프 감지 실행 (새 점 추가 후)
+            checkLoop(idx, pos.clone());
+        }
+
+        // ==========================================
+        // FLOATING TEXT
+        // ==========================================
+        function showFloatingText(msg, pos, color = '#fff') {
+            const div = document.createElement('div');
+            div.textContent = msg;
+            Object.assign(div.style, {
+                position: 'fixed', color: color, fontWeight: 'bold',
+                textShadow: '0 2px 6px rgba(0,0,0,0.8)', pointerEvents: 'none',
+                transform: 'translate(-50%,-50%)', fontSize: '18px',
+                transition: 'all 1s ease-out', zIndex: 200,
+                fontFamily: "'Fredoka One', cursive",
+            });
+            const v = pos.clone().project(camera);
+            div.style.left = `${(v.x * .5 + .5) * window.innerWidth}px`;
+            div.style.top  = `${(-(v.y * .5) + .5) * window.innerHeight}px`;
+            document.body.appendChild(div);
+            requestAnimationFrame(() => {
+                div.style.top = `${parseFloat(div.style.top) - 60}px`;
+                div.style.opacity = '0';
+            });
+            setTimeout(() => div.remove(), 1100);
+        }
+
+        // ==========================================
+        // AIMING SYSTEM
+        // ==========================================
+        const aimGroup = new THREE.Group();
+        aimGroup.visible = false;
+        scene.add(aimGroup);
+
+        const arrow = new THREE.ArrowHelper(
+            new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0),
+            1.5, 0x72D27E, 0.4, 0.3
+        );
+        aimGroup.add(arrow);
+
+        const tailGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 1)
+        ]);
+        const tailLine = new THREE.Line(tailGeo, new THREE.LineBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.6 }));
+        aimGroup.add(tailLine);
+
+        const TRAJ_POINTS = 20;
+        const trajGeo = new THREE.BufferGeometry();
+        trajGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAJ_POINTS * 3), 3));
+        const trajLine = new THREE.Line(
+            trajGeo,
+            new THREE.LineDashedMaterial({ color: 0xFFFFFF, dashSize: 0.15, gapSize: 0.1, transparent: true, opacity: 0.45 })
+        );
+        trajLine.visible = false;
+        scene.add(trajLine);
+
+        // ==========================================
+        // UI ELEMENTS
+        // ==========================================
+        const elements = {
+            timer:        document.getElementById('timer'),
+            territoryP1:  document.getElementById('territory-p1'),
+            territoryP2:  document.getElementById('territory-p2'),
+            avatarP1:     document.getElementById('avatar-p1'),
+            avatarP2:     document.getElementById('avatar-p2'),
+            turnIndicator: document.getElementById('turn-indicator'),
+            turnText:     document.getElementById('turn-text'),
+            powerGauge:   document.getElementById('power-gauge'),
+            powerFill:    document.getElementById('power-fill'),
+            statsPanel:   document.getElementById('stats-panel'),
+            optionsPanel: document.getElementById('options-panel'),
+            gameOver:     document.getElementById('game-over'),
+            statTurn:     document.getElementById('stat-turn'),
+            statP1Shots:  document.getElementById('stat-p1-shots'),
+            statP2Shots:  document.getElementById('stat-p2-shots'),
+            statP1Distance: document.getElementById('stat-p1-distance'),
+            statP2Distance: document.getElementById('stat-p2-distance'),
+            statCollisions: document.getElementById('stat-collisions'),
+        };
+
+        // ==========================================
+        // GAME LOGIC
+        // ==========================================
+        function switchTurn() {
+            clearInterval(gameState._turnTimer);
+            const countdown = document.getElementById('turn-countdown');
+            if (countdown) countdown.style.display = 'none';
+            gameState.isFollowing = true;
+
+            const prevPs = gameState.currentPlayer === 1 ? gameState.player1 : gameState.player2;
+            prevPs.ink = Math.min(CONFIG.inkMax, prevPs.ink + CONFIG.inkRechargePerTurn);
+
+            gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
+            gameState.turn++;
+            playSound('turn');
+            gameState.isPlanning = true;
+            gameState.hasShot = false;
+            elements.avatarP1.classList.toggle('active', gameState.currentPlayer === 1);
+            elements.avatarP2.classList.toggle('active', gameState.currentPlayer === 2);
+            elements.turnText.textContent = `Player ${gameState.currentPlayer}'s Turn`;
+            elements.turnIndicator.classList.add('show');
+            setTimeout(() => elements.turnIndicator.classList.remove('show'), 1500);
+            updateStats();
+            setTimeout(() => startTurnTimer(), 800);
+        }
+
+        function updateStats() {
+            elements.statTurn.textContent = gameState.turn;
+            elements.statP1Shots.textContent = gameState.player1.shots;
+            elements.statP2Shots.textContent = gameState.player2.shots;
+            elements.statP1Distance.textContent = `${(gameState.player1.distance * 0.1).toFixed(1)} km`;
+            elements.statP2Distance.textContent = `${(gameState.player2.distance * 0.1).toFixed(1)} km`;
+            elements.statCollisions.textContent = gameState.collisions;
+            const lp1 = document.getElementById('stat-p1-loops');
+            const lp2 = document.getElementById('stat-p2-loops');
+            if (lp1) lp1.textContent = gameState.player1.loops;
+            if (lp2) lp2.textContent = gameState.player2.loops;
+            updateInkUI();
+        }
+
+        function updateInkUI() {
+            const i1 = gameState.player1.ink, i2 = gameState.player2.ink;
+            const bar1 = document.getElementById('ink-bar-p1');
+            const bar2 = document.getElementById('ink-bar-p2');
+            const lbl1 = document.getElementById('ink-p1');
+            const lbl2 = document.getElementById('ink-p2');
+            if (bar1) bar1.style.width = `${i1}%`;
+            if (bar2) bar2.style.width = `${i2}%`;
+            if (lbl1) lbl1.textContent = Math.ceil(i1);
+            if (lbl2) lbl2.textContent = Math.ceil(i2);
+            if (bar1) bar1.style.background = i1 < 20 ? '#FF4757' : '';
+            if (bar2) bar2.style.background = i2 < 20 ? '#FF4757' : '';
+        }
+
+        function updateTimer() {
+            if (gameState.timeRemaining <= 0) { endGame(); return; }
+            gameState.timeRemaining--;
+            const m = Math.floor(gameState.timeRemaining / 60);
+            const s = gameState.timeRemaining % 60;
+            elements.timer.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+            elements.timer.style.color = gameState.timeRemaining <= 30 ? 'var(--player1-color)' : 'var(--text-dark)';
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearInterval(gameState._turnTimer);
+            const countdown = document.getElementById('turn-countdown');
+            if (countdown) countdown.style.display = 'none';
+            const p1 = gameState.player1.territory;
+            const p2 = gameState.player2.territory;
+            let winText;
+            if (Math.abs(p1 - p2) < 0.01) winText = '🤝 무승부!';
+            else winText = `🏆 Player ${p1 > p2 ? 1 : 2} 우승!`;
+            document.getElementById('winner-text').textContent = winText;
+            document.getElementById('winner-text').style.color = p1 > p2 ? 'var(--player1-color)' : 'var(--player2-color)';
+            document.getElementById('final-p1').textContent = `${p1.toFixed(2)}%`;
+            document.getElementById('final-p2').textContent = `${p2.toFixed(2)}%`;
+            elements.gameOver.classList.add('show');
+        }
+
+        // ==========================================
+        // FORCE CALCULATION & TRAJECTORY PREVIEW
+        // ==========================================
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function getIntersects(clientX, clientY, objects) {
+            mouse.x =  (clientX / window.innerWidth)  * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            return raycaster.intersectObjects(objects, true);
+        }
+
+        function calculateForce(currentX, currentY, startX, startY) {
+            const deltaX = currentX - startX;
+            const deltaY = currentY - startY;
+            const player = players[gameState.currentPlayer - 1];
+            const surfaceNormal = player.mesh.position.clone().normalize();
+            const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+            const camUp    = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+            const forceVector = new THREE.Vector3()
+                .addScaledVector(camRight, -deltaX)
+                .addScaledVector(camUp,     deltaY);
+            forceVector.sub(surfaceNormal.multiplyScalar(forceVector.dot(surfaceNormal)));
+            return { forceDir: forceVector.normalize(), deltaX, deltaY };
+        }
+
+        function updateTrajectory(startPos, impulseVector) {
+            const dt = 0.016;
+            const simPos = startPos.clone();
+            const simVel = impulseVector.clone().multiplyScalar(dt / CONFIG.mass);
+            const positions = trajLine.geometry.attributes.position.array;
+            const omega = new THREE.Vector3(0, 1, 0);
+
+            for (let i = 0; i < TRAJ_POINTS; i++) {
+                positions[i * 3]     = simPos.x;
+                positions[i * 3 + 1] = simPos.y;
+                positions[i * 3 + 2] = simPos.z;
+
+                const gravDir = simPos.clone().normalize().negate();
+                const gravAcc = gravDir.multiplyScalar(CONFIG.gravity * dt * dt);
+
+                const coriolisAcc = simVel.clone().cross(omega)
+                    .multiplyScalar(CONFIG.coriolisFactor * dt);
+
+                simVel.add(gravAcc).add(coriolisAcc);
+                simVel.multiplyScalar(1 - CONFIG.damping * dt);
+                simPos.add(simVel);
+
+                if (simPos.length() < CONFIG.earthRadius + CONFIG.playerRadius) {
+                    simPos.setLength(CONFIG.earthRadius + CONFIG.playerRadius + 0.02);
+                }
+            }
+            trajLine.geometry.attributes.position.needsUpdate = true;
+            trajLine.computeLineDistances();
+        }
+
+        // ==========================================
+        // INPUT: POINTER EVENTS
+        // ==========================================
+        let isDragging = false;
+        const dragStart = new THREE.Vector2();
+
+        function onPointerDown(e) {
+            if (!gameActive || !gameState.isPlanning || gameState.hasShot) return;
+            const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+            const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+            if (clientX == null) return;
+            const player = players[gameState.currentPlayer - 1];
+            const hits = getIntersects(clientX, clientY, [player.mesh]);
+            if (hits.length > 0) {
+                isDragging = true;
+                controls.enabled = false;
+                dragStart.set(clientX, clientY);
+                aimGroup.visible = true;
+                trajLine.visible = true;
+                aimGroup.position.copy(player.mesh.position);
+                elements.powerGauge.classList.add('visible');
+            }
+        }
+
+        function onPointerMove(e) {
+            const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+            const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+            if (clientX == null) return;
+
+            if (!isDragging) {
+                const player = players[gameState.currentPlayer - 1];
+                const hits = getIntersects(clientX, clientY, [player.mesh]);
+                document.body.style.cursor = hits.length > 0 ? 'grab' : 'default';
+                return;
+            }
+            document.body.style.cursor = 'grabbing';
+
+            const { forceDir } = calculateForce(clientX, clientY, dragStart.x, dragStart.y);
+            const dx = clientX - dragStart.x, dy = clientY - dragStart.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const MAX_DRAG = 250;
+            const power = Math.min(dist, MAX_DRAG) / MAX_DRAG;
+
+            arrow.setDirection(forceDir);
+            arrow.setLength(1 + power * 2, 0.4, 0.3);
+            arrow.setColor(new THREE.Color().setHSL(0.3 * (1 - power), 1, 0.5));
+
+            const tailDir = forceDir.clone().negate();
+            tailLine.lookAt(tailLine.position.clone().add(tailDir));
+            tailLine.scale.z = power * 3.5;
+
+            const impulse = forceDir.clone().multiplyScalar(power * CONFIG.shootForce);
+            updateTrajectory(players[gameState.currentPlayer - 1].mesh.position, impulse);
+            elements.powerFill.style.width = `${power * 100}%`;
+            if (power > 0.05) playSound('charge');
+        }
+
+        function onPointerUp(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            controls.enabled = true;
+            aimGroup.visible = false;
+            trajLine.visible = false;
+            elements.powerGauge.classList.remove('visible');
+            elements.powerFill.style.width = '0%';
+            document.body.style.cursor = 'default';
+
+            const clientX = e.clientX ?? e.changedTouches?.[0]?.clientX;
+            const clientY = e.clientY ?? e.changedTouches?.[0]?.clientY;
+            if (clientX == null) return;
+
+            const { forceDir } = calculateForce(clientX, clientY, dragStart.x, dragStart.y);
+            const dx = clientX - dragStart.x, dy = clientY - dragStart.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const power = Math.min(dist, 250) / 250;
+
+            if (power < 0.1) return;
+
+            const impulse = forceDir.clone().multiplyScalar(power * CONFIG.shootForce);
+            const player = players[gameState.currentPlayer - 1];
+
+            player.body.applyImpulse(
+                new CANNON.Vec3(impulse.x, impulse.y, impulse.z),
+                player.body.position
+            );
+            gameState.isFollowing = true;
+            playSound('shoot');
+            gameState.hasShot = true;
+            gameState.isPlanning = false;
+            clearInterval(gameState._turnTimer);
+            const countdown = document.getElementById('turn-countdown');
+            if (countdown) countdown.style.display = 'none';
+            if (gameState.currentPlayer === 1) gameState.player1.shots++;
+            else gameState.player2.shots++;
+            updateStats();
+        }
+
+        renderer.domElement.addEventListener('pointerdown',  onPointerDown, { passive: false });
+        window.addEventListener('pointermove', onPointerMove, { passive: true });
+        window.addEventListener('pointerup',   onPointerUp);
+        renderer.domElement.addEventListener('touchstart', e => { if(isDragging) e.preventDefault(); }, { passive: false });
+        renderer.domElement.addEventListener('touchmove',  e => { if(isDragging) e.preventDefault(); }, { passive: false });
+
+        // ==========================================
+        // PHYSICS FORCES
+        // ==========================================
+        function applyPhysicsForces(body) {
+            const gravDir = body.position.clone().negate().unit();
+            body.applyForce(gravDir.scale(CONFIG.gravity * body.mass), body.position);
+
+            if (body.velocity.lengthSquared() > 0.1) {
+                const vel = new THREE.Vector3(body.velocity.x, body.velocity.y, body.velocity.z);
+                const omega = new THREE.Vector3(0, 1, 0);
+
+                const posN = new THREE.Vector3(body.position.x, body.position.y, body.position.z).normalize();
+                const lat = Math.asin(Math.max(-1, Math.min(1, posN.y)));
+                const latScale = Math.abs(Math.sin(lat));
+
+                const coriolis = new THREE.Vector3().crossVectors(vel, omega)
+                    .multiplyScalar(CONFIG.coriolisFactor * (0.3 + 0.7 * latScale));
+                body.applyForce(
+                    new CANNON.Vec3(coriolis.x, coriolis.y, coriolis.z),
+                    body.position
+                );
+            }
+        }
+
+        world.addEventListener('postStep', () => {
+            const p1 = new THREE.Vector3().copy(players[0].body.position);
+            const p2 = new THREE.Vector3().copy(players[1].body.position);
+            if (p1.distanceTo(p2) < CONFIG.playerRadius * 2.5) {
+                gameState.collisions++;
+                updateStats();
+            }
+        });
+
+        // ==========================================
+        // CAMERA CONTROLS
+        // ==========================================
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enablePan = false;
+        controls.minDistance = 6;
+        controls.maxDistance = 18;
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.addEventListener('start', () => { gameState.isRotating = true; gameState.isFollowing = false; });
+        controls.addEventListener('end',   () => { gameState.isRotating = false; });
+        window.addEventListener('dblclick', () => { gameState.isFollowing = true; });
+
+        // ==========================================
+        // UI CONTROLS
+        // ==========================================
+        document.getElementById('btn-stats').addEventListener('click', () => {
+            elements.statsPanel.style.display = elements.statsPanel.style.display === 'none' ? 'block' : 'none';
+        });
+        document.getElementById('btn-options').addEventListener('click', () => {
+            elements.optionsPanel.style.display = elements.optionsPanel.style.display === 'none' ? 'block' : 'none';
+        });
+        document.getElementById('btn-shoot').addEventListener('click', () => {
+            if (!gameState.hasShot) return;
+            if (players[gameState.currentPlayer - 1].body.velocity.length() < 0.5) switchTurn();
+        });
+        document.getElementById('btn-reset').addEventListener('click', () => location.reload());
+        document.getElementById('btn-help').addEventListener('click', () => {
+            const m = document.getElementById('help-modal');
+            m.style.display = 'flex';
+        });
+        document.getElementById('toggle-sound').addEventListener('click', function() {
+            this.classList.toggle('active');
+            gameState.settings.soundEnabled = this.classList.contains('active');
+        });
+        document.getElementById('toggle-rotation').addEventListener('click', function() {
+            this.classList.toggle('active');
+            gameState.settings.cameraRotation = this.classList.contains('active');
+        });
+        document.getElementById('toggle-trails').addEventListener('click', function() {
+            this.classList.toggle('active');
+            const show = this.classList.contains('active');
+            gameState.settings.showTrails = show;
+            trail1.mesh.visible = trail2.mesh.visible = show;
+        });
+
+        let volDragging = false;
+        const volSlider = document.getElementById('volume-slider');
+        const volFill   = document.getElementById('volume-fill');
+        function updateVolume(e) {
+            const rect = volSlider.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            volFill.style.width = `${pct * 100}%`;
+            gameState.settings.volume = pct;
+        }
+        volSlider.addEventListener('mousedown', e => { volDragging = true; updateVolume(e); });
+        document.addEventListener('mousemove', e => { if (volDragging) updateVolume(e); });
+        document.addEventListener('mouseup', () => { volDragging = false; });
+
+        // ==========================================
+        // ANIMATION LOOP
+        // ==========================================
+        const clock = new THREE.Clock();
+        let lastSecond = 0;
+        let gameActive = false;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const deltaTime = Math.min(clock.getDelta(), 0.1);
+            const elapsed   = clock.getElapsedTime();
+
+            if (gameActive) {
+                if (Math.floor(elapsed) > lastSecond) {
+                    lastSecond = Math.floor(elapsed);
+                    updateTimer();
+                }
+            }
+
+            players.forEach(p => applyPhysicsForces(p.body));
+            world.step(deltaTime);
+
+            players.forEach((player, idx) => {
+                player.mesh.position.copy(player.body.position);
+                player.mesh.quaternion.copy(player.body.quaternion);
+
+                if (!gameActive) return;
+
+                const speed = player.body.velocity.length();
+                if (speed > CONFIG.trailSpeedThreshold && gameState.settings.showTrails) {
+                    const curPos = new THREE.Vector3().copy(player.body.position);
+                    const d = curPos.distanceTo(player.lastTrailPos);
+                    if (d > CONFIG.trailSpacing) {
+                        addTrail(idx, curPos);
+                        player.lastTrailPos.copy(curPos);
+                        if (idx === 0) gameState.player1.distance += d;
+                        else           gameState.player2.distance += d;
+                    }
+                }
+
+                if (gameState.hasShot && !gameState.isPlanning) {
+                    if (idx === gameState.currentPlayer - 1 && speed < 0.3) {
+                        setTimeout(() => switchTurn(), 500);
+                        gameState.isPlanning = true;
+                    }
+                }
+            });
+
+            if (gameState.settings.cameraRotation) {
+                cloudGroup.rotation.y += 0.0001;
+            }
+            if (isDragging) aimGroup.position.copy(players[gameState.currentPlayer - 1].mesh.position);
+
+            controls.target.set(0, 0, 0);
+            if (gameActive && gameState.isFollowing && !gameState.isRotating) {
+                const ap = players[gameState.currentPlayer - 1];
+                const upVec = ap.mesh.position.clone().normalize();
+                const spd   = ap.body.velocity.length();
+                const targetDist = spd > 2 ? 18 : spd > 0.5 ? 12 : 8;
+                camera.position.lerp(upVec.multiplyScalar(targetDist), 0.06);
+            }
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ==========================================
+        // TITLE SCREEN + GAME START
+        // ==========================================
+        let selectedDuration = 180;
+
+        window.setDuration = function(sec) {
+            selectedDuration = sec;
+            ['dur-1','dur-3','dur-5'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.style.background = 'rgba(255,255,255,0.15)';
+                el.style.color = 'white';
+                el.style.borderColor = 'rgba(255,255,255,0.4)';
+            });
+            const map = { 60: 'dur-1', 180: 'dur-3', 300: 'dur-5' };
+            const active = document.getElementById(map[sec]);
+            if (active) {
+                active.style.background = 'rgba(255,255,255,0.9)';
+                active.style.color = '#FF4757';
+                active.style.borderColor = 'white';
+            }
+        };
+
+        window.startFromTitle = function() {
+            const btn = document.getElementById('btn-play');
+            if (btn && btn.disabled) return;
+
+            if (!biomeReady) {
+                if (btn) { btn.textContent = '⏳ Loading map...'; btn.disabled = true; }
+                const prevCb = gameReadyCallback;
+                gameReadyCallback = () => {
+                    if (prevCb) prevCb();
+                    window.startFromTitle();
+                };
+                return;
+            }
+
+            const ts = document.getElementById('title-screen');
+            if (ts) {
+                ts.style.transition = 'opacity 0.4s';
+                ts.style.opacity = '0';
+                setTimeout(() => { if (ts.parentNode) ts.parentNode.removeChild(ts); }, 450);
+            }
+
+            CONFIG.gameDuration = selectedDuration;
+            gameState.timeRemaining = selectedDuration;
+
+            const m = Math.floor(selectedDuration / 60);
+            const s = selectedDuration % 60;
+            elements.timer.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+
+            gameActive = true;
+            lastSecond = Math.floor(clock.getElapsedTime());
+
+            elements.turnText.textContent = "Player 1's Turn";
+            elements.turnIndicator.classList.add('show');
+            setTimeout(() => elements.turnIndicator.classList.remove('show'), 2000);
+            setTimeout(startTurnTimer, 600);
+        };
+
+        function startTurnTimer() {
+            clearInterval(gameState._turnTimer);
+            let remaining = CONFIG.turnTimeLimit;
+            const countdown = document.getElementById('turn-countdown');
+            if (countdown) {
+                countdown.textContent = remaining;
+                countdown.style.color = '#2D3436';
+                countdown.style.display = 'flex';
+            }
+            gameState._turnTimer = setInterval(() => {
+                remaining--;
+                if (countdown) {
+                    countdown.textContent = remaining;
+                    if (remaining <= 10) {
+                        countdown.style.color = '#FF4757';
+                        countdown.style.transform = remaining % 2 === 0
+                            ? 'translateX(-50%) scale(1.15)'
+                            : 'translateX(-50%) scale(1.0)';
+                    } else {
+                        countdown.style.color = '#2D3436';
+                        countdown.style.transform = 'translateX(-50%) scale(1.0)';
+                    }
+                }
+                if (remaining <= 0) {
+                    clearInterval(gameState._turnTimer);
+                    if (countdown) {
+                        countdown.style.display = 'none';
+                        countdown.style.transform = 'translateX(-50%) scale(1.0)';
+                    }
+                    if (gameState.isPlanning) switchTurn();
+                }
+            }, 1000);
+        }
+
+        // ==========================================
+        // BOOTSTRAP
+        // ==========================================
+        const loadingEl = document.getElementById('loading');
+        if (loadingEl) {
+            loadingEl.classList.add('hidden');
+            setTimeout(() => { if (loadingEl.parentNode) loadingEl.style.display = 'none'; }, 550);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
