@@ -687,6 +687,46 @@
         }
         #fort-fire-hint { font-size: 9px; color: rgba(255,255,255,0.55); font-family:'DM Sans',sans-serif; letter-spacing:0.5px; margin-top:4px; text-align:center; }
         #fort-aim-compass { width:54px; height:54px; filter:drop-shadow(0 2px 6px rgba(255,215,0,0.3)); cursor:default; }
+
+        /* ── 탐색/조준 모드 토글 ── */
+        #fort-mode-toggle {
+            position: absolute; top: -52px; left: 50%;
+            transform: translateX(-50%);
+            display: flex; background: rgba(0,0,0,0.65);
+            border-radius: 24px; overflow: hidden;
+            border: 1.5px solid rgba(255,255,255,0.2);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+        }
+        .fort-mode-btn {
+            padding: 7px 18px; font-size: 13px; font-family:'Fredoka One',cursive;
+            border: none; cursor: pointer; transition: all 0.2s;
+            letter-spacing: 0.5px; user-select: none;
+        }
+        .fort-mode-btn.browse {
+            background: transparent; color: rgba(255,255,255,0.5);
+        }
+        .fort-mode-btn.browse.active {
+            background: rgba(255,255,255,0.15); color: white;
+        }
+        .fort-mode-btn.aim {
+            background: transparent; color: rgba(255,215,0,0.5);
+        }
+        .fort-mode-btn.aim.active {
+            background: rgba(255,215,0,0.25); color: #FFD700;
+        }
+
+        /* ── 조준 모드 진입 시 화면 테두리 강조 ── */
+        #fort-aim-overlay {
+            position: fixed; inset: 0; pointer-events: none;
+            border: 3px solid rgba(255,215,0,0); z-index: 50;
+            transition: border-color 0.25s;
+            border-radius: 0;
+        }
+        #fort-aim-overlay.active {
+            border-color: rgba(255,215,0,0.55);
+            box-shadow: inset 0 0 40px rgba(255,215,0,0.08);
+        }
+
         /* ── 조준 회전 버튼 ── */
         .fort-aim-btn {
             width:34px; height:34px; border-radius:50%;
@@ -699,7 +739,8 @@
         }
         .fort-aim-btn:hover  { background: rgba(255,215,0,0.28); transform:scale(1.1); }
         .fort-aim-btn:active { background: rgba(255,215,0,0.45); transform:scale(0.94); }
-        /* ── 비행 중 상태 힌트 ── */
+
+        /* ── 조준 모드 힌트 ── */
         #fort-dir-hint {
             position: absolute; top: -34px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.75); border-radius: 8px; padding: 4px 12px;
@@ -913,9 +954,17 @@
         </div>
     </div>
 
+    <!-- 조준 모드 테두리 오버레이 -->
+    <div id="fort-aim-overlay"></div>
+
     <!-- Fortress Mode HUD (게임 중 표시) -->
     <div id="fortress-hud">
-        <div id="fort-dir-hint">◄ ► 버튼 또는 ← → 키로 조준 · 카메라는 자유롭게 드래그</div>
+        <!-- 탐색/조준 모드 토글 -->
+        <div id="fort-mode-toggle">
+            <button class="fort-mode-btn browse active" id="fort-btn-browse" onclick="setFortressPhase('browse')">🌍 탐색</button>
+            <button class="fort-mode-btn aim"           id="fort-btn-aim"    onclick="setFortressPhase('aim')">🎯 조준</button>
+        </div>
+        <div id="fort-dir-hint">🌍 탐색: 자유롭게 맵 확인 · 🎯 조준: 드래그로 방향 조절</div>
         <!-- Direction: ◄ ► 버튼으로 독립 조준 -->
         <div class="fort-dial-wrap">
             <div class="fort-dial-label">Direction</div>
@@ -2517,8 +2566,25 @@
                 setTimeout(() => {
                     updateMissileCountHUD();
                     updateFortressPreview();
-                    // ★ 두 링 모두 재생성 (활성/비활성 강조 갱신)
                     [0, 1].forEach(i => updateLaunchMarker(i));
+
+                    // ★ 문제 1 수정: controls.target을 지구 중심(0,0,0)으로 리셋하고
+                    //   카메라를 새 플레이어 거점 위로 부드럽게 이동
+                    controls.target.set(0, 0, 0);
+                    const newIdx = gameState.currentPlayer - 1;
+                    const newLp  = fortressState.launchPos[newIdx];
+                    if (newLp) {
+                        const dest = newLp.clone().normalize().multiplyScalar(18);
+                        let st = 0;
+                        (function snapCam(now) {
+                            st++;
+                            camera.position.lerp(dest, 0.1);
+                            controls.update();
+                            if (st < 30) requestAnimationFrame(snapCam);
+                        })();
+                    }
+                    // 탐색 모드로 리셋
+                    setFortressPhase('browse');
                 }, 150);
             }
 
@@ -2967,8 +3033,12 @@
                         players[i].body.velocity.set(0,0,0);
                     }
                 });
-                // ★ 카메라 강제 추적 완전 제거 — OrbitControls로 자유롭게 둘러볼 수 있음
-                // (미사일 비행 중에만 missileStep에서 카메라 제어)
+                // ★ 문제 1: controls.target을 항상 지구 중심(0,0,0) 근방으로 유지
+                // 미사일 비행 중에는 missileStep이 카메라를 제어하므로 건드리지 않음
+                if (!fortressState.inFlight && fortressState.phase !== 'aim') {
+                    // 탐색 모드: OrbitControls가 지구 중심을 축으로 자유 회전
+                    controls.target.lerp(new THREE.Vector3(0, 0, 0), 0.08);
+                }
             } else {
                 controls.target.set(0, 0, 0);
                 if (gameActive && gameState.isFollowing && !gameState.isRotating) {
@@ -3282,6 +3352,9 @@
             // ★ 카메라 독립 조준각 (방위각, 라디안) — 플레이어별 독립 저장
             aimAngle:          [0, Math.PI],  // P1=0°(North), P2=180°(South) 기본값
             _aimRotTimer:      null,           // 홀드 회전 타이머
+            // ★ 탐색/조준 모드
+            phase:             'browse',       // 'browse' | 'aim'
+            _aimDrag:          null,           // 조준 모드 드래그 상태 {x, y}
             // ★ Fortress 전용 통계
             stats: {
                 hits:   [0, 0],   // 육지 착탄 수
@@ -3300,6 +3373,8 @@
             fortressState.isCharging        = false;
             fortressState.aimAngle          = [0, Math.PI]; // P1=북, P2=남 초기값
             fortressState.stats             = { hits:[0,0], shots:[0,0], steals:[0,0] };
+            fortressState.phase             = 'browse';
+            fortressState._aimDrag          = null;
             clearImpactMarkers?.();
 
             // ★ 잉크 UI 숨김
@@ -3654,9 +3729,10 @@
             updateMissileCountHUD();
             // ★ 발사 사운드
             if (typeof playSound === 'function') playSound('shoot');
-            // ★ 비행 중 캐릭터 메시 숨김 (미사일로 대체)
+            // ★ 비행 중 캐릭터 메시 숨김
             if (players[idx]) players[idx].mesh.visible = false;
-            // ★ 비행 중 힌트 전환
+            // ★ 비행 중: OrbitControls 비활성, 힌트 전환
+            controls.enabled = false;
             const hintEl = document.getElementById('fort-dir-hint');
             if (hintEl) hintEl.textContent = '⚡ 미사일 비행 중...';
             gameState.isFollowing = false;
@@ -3720,17 +3796,16 @@
                 }
 
                 // 카메라: 미사일 추적 (발사 거점에서 착탄 지점을 내려다보는 구도)
-                const missileUp = pos.clone().normalize();
                 const launchSurf = fortressState.launchPos[idx]
                     ? fortressState.launchPos[idx].clone().normalize().multiplyScalar(R)
                     : pos.clone();
-                // 발사 거점과 미사일을 모두 포함하는 중간 지점을 target으로
                 const midPt = launchSurf.clone().lerp(pos.clone(), 0.5);
                 const dist  = launchSurf.distanceTo(pos);
                 const camH  = Math.max(R * 1.8, dist * 1.4 + R * 1.2);
                 const camWant = midPt.clone().normalize().multiplyScalar(camH);
                 camera.position.lerp(camWant, 0.06);
-                controls.target.lerp(midPt.clone(), 0.08);
+                // ★ controls.target은 항상 지구 중심 유지 → 착탄 후 궤도 중심 깨지지 않음
+                controls.target.lerp(new THREE.Vector3(0, 0, 0), 0.15);
                 controls.update();
 
                 // ★ Swept-sphere 착탄 판정: 이전 위치~현재 위치 사이 구 표면 통과 여부 확인
@@ -3751,9 +3826,8 @@
                 gameState.isFollowing  = true;
                 // ★ 캐릭터 메시 복원
                 if (players[idx]) players[idx].mesh.visible = true;
-                // ★ 힌트 텍스트 복원
-                const _hintEl = document.getElementById('fort-dir-hint');
-                if (_hintEl) _hintEl.textContent = '◄ ► 버튼 또는 ← → 키로 조준 · 카메라는 자유롭게 드래그';
+                // ★ 탐색 모드로 복귀 (OrbitControls 재활성 + 오버레이 제거)
+                setFortressPhase('browse');
 
                 // 미사일 메시 제거 (material.dispose 포함)
                 setTimeout(() => {
@@ -3798,7 +3872,8 @@
                     function swingCamera(now) {
                         const t = Math.min(1, (now - swingStart) / SWING_MS);
                         camera.position.lerp(camDest, 0.14);
-                        controls.target.lerp(impactSurf, 0.14);
+                        // ★ controls.target을 지구 중심으로 점진 복원 (카메라 궤도 중심 수정)
+                        controls.target.lerp(new THREE.Vector3(0, 0, 0), 0.14);
                         controls.update();
                         if (t < 1) requestAnimationFrame(swingCamera);
                     }
@@ -3866,23 +3941,55 @@
             requestAnimationFrame(animParticles);
         }
 
+        // ── 탐색/조준 모드 전환 ────────────────────────────────────────────
+        window.setFortressPhase = function(phase) {
+            if (!fortressState.active || fortressState.inFlight) return;
+            fortressState.phase = phase;
+
+            const overlay   = document.getElementById('fort-aim-overlay');
+            const btnBrowse = document.getElementById('fort-btn-browse');
+            const btnAim    = document.getElementById('fort-btn-aim');
+            const hint      = document.getElementById('fort-dir-hint');
+
+            if (phase === 'aim') {
+                // 조준 모드: OrbitControls 비활성, 드래그 → 방향 회전
+                controls.enabled = false;
+                if (overlay)   overlay.classList.add('active');
+                if (btnBrowse) btnBrowse.classList.remove('active');
+                if (btnAim)    btnAim.classList.add('active');
+                if (hint)      hint.textContent = '← → 드래그로 방향 · 위아래로 각도 · ◄ ► 버튼 또는 ← → 키';
+            } else {
+                // 탐색 모드: OrbitControls 활성화
+                controls.enabled = true;
+                fortressState._aimDrag = null;
+                if (overlay)   overlay.classList.remove('active');
+                if (btnBrowse) btnBrowse.classList.add('active');
+                if (btnAim)    btnAim.classList.remove('active');
+                if (hint)      hint.textContent = '🌍 탐색: 자유롭게 맵 확인 · 🎯 조준: 드래그로 방향 조절';
+            }
+        };
+
                 function setupFortressInput() {
             if (fortressState._inputSetup) return;
             fortressState._inputSetup = true;
 
             const AIM_STEP = 10 * Math.PI / 180; // 한 번 클릭 = 10°
 
-            // ── PC: 스페이스바 발사 ──────────────────────────────────────
+            // ── 키보드 입력 ──────────────────────────────────────────────
             window.addEventListener('keydown', (e) => {
                 if (!fortressState.active || e.repeat) return;
                 if (e.code === 'Space') {
                     e.preventDefault(); fortressChargeStart();
-                } else if (e.code === 'ArrowLeft'  || e.code === 'KeyA') {
+                } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
                     e.preventDefault();
                     rotateAim(gameState.currentPlayer - 1, -AIM_STEP);
                 } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
                     e.preventDefault();
                     rotateAim(gameState.currentPlayer - 1,  AIM_STEP);
+                } else if (e.code === 'Tab') {
+                    // Tab 키로 탐색/조준 모드 토글
+                    e.preventDefault();
+                    setFortressPhase(fortressState.phase === 'browse' ? 'aim' : 'browse');
                 }
             });
             window.addEventListener('keyup', (e) => {
@@ -3890,7 +3997,7 @@
                 e.preventDefault(); fortressChargeRelease();
             });
 
-            // ── 모바일/PC 발사 버튼 ─────────────────────────────────────
+            // ── 발사 버튼 ────────────────────────────────────────────────
             const btn = document.getElementById('fort-fire-btn');
             if (btn) {
                 btn.addEventListener('touchstart',  (e) => { e.preventDefault(); fortressChargeStart();   }, { passive:false });
@@ -3934,6 +4041,49 @@
             setupAimButton('fort-aim-left',  -1);
             setupAimButton('fort-aim-right',  1);
 
+            // ── 캔버스 드래그: 조준 모드에서 방향/각도 제어 ──────────────
+            // pointerdown은 fort 버튼이 아닌 캔버스(지구) 영역에서만 처리
+            const canvas = renderer.domElement;
+
+            canvas.addEventListener('pointerdown', (e) => {
+                if (fortressState.phase !== 'aim' || fortressState.inFlight) return;
+                // HUD 버튼 영역 클릭은 무시
+                if (e.target !== canvas) return;
+                fortressState._aimDrag = { x: e.clientX, y: e.clientY };
+                e.stopPropagation();
+            }, { capture: true, passive: false });
+
+            window.addEventListener('pointermove', (e) => {
+                if (fortressState.phase !== 'aim' || !fortressState._aimDrag || fortressState.inFlight) return;
+                const dx = e.clientX - fortressState._aimDrag.x;
+                const dy = e.clientY - fortressState._aimDrag.y;
+                fortressState._aimDrag = { x: e.clientX, y: e.clientY };
+
+                const idx = gameState.currentPlayer - 1;
+                // 수평 드래그 → 방위각 회전 (화면 폭 기준, 360°/500px)
+                const anglePerPx = (2 * Math.PI) / 500;
+                if (Math.abs(dx) > 0.5) {
+                    rotateAim(idx, dx * anglePerPx);
+                }
+                // 수직 드래그 → elevation 슬라이더 조정 (200px → 80° 범위)
+                if (Math.abs(dy) > 0.5) {
+                    const elevEl = document.getElementById('fort-elev');
+                    const valEl  = document.getElementById('fort-elev-val');
+                    if (elevEl) {
+                        const newVal = Math.max(5, Math.min(85,
+                            parseFloat(elevEl.value) - dy * (80 / 200)
+                        ));
+                        elevEl.value = newVal.toFixed(0);
+                        if (valEl) valEl.textContent = newVal.toFixed(0) + '°';
+                        updateFortressPreview();
+                    }
+                }
+            });
+
+            window.addEventListener('pointerup', () => {
+                fortressState._aimDrag = null;
+            });
+
             // ── Angle 슬라이더 debounce ──────────────────────────────────
             const elevSlider = document.getElementById('fort-elev');
             if (elevSlider) {
@@ -3941,7 +4091,7 @@
                 elevSlider.addEventListener('input', () => {
                     document.getElementById('fort-elev-val').textContent = elevSlider.value + '°';
                     clearTimeout(_elevTimer);
-                    _elevTimer = setTimeout(() => updateFortressPreview(), 30); // 30ms debounce
+                    _elevTimer = setTimeout(() => updateFortressPreview(), 30);
                 });
             }
         }
