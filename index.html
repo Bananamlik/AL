@@ -1387,10 +1387,10 @@
             <div id="fort-joystick-wrap">
                 <div class="fort-dial-label">Direction</div>
                 <div id="fort-joystick-base">
-                    <span class="joy-label n">N</span>
-                    <span class="joy-label s">S</span>
-                    <span class="joy-label e">E</span>
-                    <span class="joy-label w">W</span>
+                    <span class="joy-label n">▲</span>
+                    <span class="joy-label s">▼</span>
+                    <span class="joy-label e">▶</span>
+                    <span class="joy-label w">◀</span>
                     <div id="fort-joystick-thumb"></div>
                 </div>
                 <div id="fort-joy-bearing">0°</div>
@@ -1436,10 +1436,10 @@
         <div id="fort-br-joy-wrap">
             <div class="fort-dial-label" style="text-align:center;margin-bottom:3px;">Direction</div>
             <div id="fort-br-joy-base">
-                <span class="joy-label n">N</span>
-                <span class="joy-label s">S</span>
-                <span class="joy-label e">E</span>
-                <span class="joy-label w">W</span>
+                <span class="joy-label n">▲</span>
+                <span class="joy-label s">▼</span>
+                <span class="joy-label e">▶</span>
+                <span class="joy-label w">◀</span>
                 <div id="fort-br-joy-thumb"></div>
             </div>
             <div id="fort-br-joy-bearing">0°</div>
@@ -2350,100 +2350,115 @@
             });
         }
 
-        // ★ 영역 채움: 3D 구면 폴리곤(Vector3[]) → UV 변환 후 레이캐스팅으로 육지 픽셀 소유권 갱신
+        // ★ 영역 채움: 3D Gnomonic 투영을 통한 완벽한 기하학적 레이캐스팅 (오목 다각형 완벽 지원)
         function createTerritoryArea(polygon3D, playerIdx) {
-
             if (polygon3D.length < 3 || !biomeData || !ownershipMap) return;
 
-            // ★ v9: 3D → UV 변환은 여기서만 (교차/면적 계산은 3D에서 완료됨)
-            const polygonUV = polygon3D.map(pt => getUV(pt));
-            const otherIdx = playerIdx === 0 ? 1 : 0;
-            const norm = normalizePolyUV(polygonUV);
+            // 1. 다각형의 중심(Pole) 계산
+            const center = new THREE.Vector3();
+            polygon3D.forEach(p => center.add(p));
+            if (center.lengthSq() < 0.0001) center.copy(polygon3D[0]);
+            center.normalize();
 
-            // ★ v9.1 핵심 수정: UV 레이캐스팅이 올바른 쪽을 채우는지 centroid로 검증
-            //
-            // 문제: 3D에서 "작은 쪽" 경로를 올바르게 선택해도,
-            //       UV 변환 시 winding 방향이 뒤집혀 pointInPolygonUV가
-            //       안쪽이 아닌 바깥쪽(= 지구 반대편)을 "inside"로 판정하는 경우 발생.
-            //       특히 북극/남극 근처, 극지방 폴리곤에서 빈번함.
-            //
-            // 해결: 3D 폴리곤 무게중심(centroid)을 UV로 변환해서
-            //       "centroid가 UV 폴리곤 안에 있는가?" 를 검증.
-            //       - true → 정상, 그대로 사용
-            //       - false → UV winding이 뒤집힌 것 → norm 배열 순서를 반전해서 교정
-            {
-                // 3D centroid: 모든 꼭짓점의 평균을 구면에 정사영
-                const centroid3D = new THREE.Vector3();
-                polygon3D.forEach(p => centroid3D.add(p));
-                centroid3D.normalize();
+            // 2. 투영을 위한 로컬 접평면의 직교 기저(Basis) 도출
+            const up = new THREE.Vector3(0, 1, 0);
+            let right = new THREE.Vector3().crossVectors(up, center);
+            if (right.lengthSq() < 0.001) right = new THREE.Vector3(1, 0, 0).crossVectors(new THREE.Vector3(0,0,1), center);
+            right.normalize();
+            const localUp = new THREE.Vector3().crossVectors(center, right).normalize();
 
-                // centroid를 UV로 변환 후 norm과 동일한 연속성 기준으로 정렬
-                const rawCUV = getUV(centroid3D);
-                // norm[0]을 기준으로 u 정렬 (normalizePolyUV와 동일한 방식)
-                const refU = norm[0].u;
-                let cu = rawCUV.u;
-                if (cu - refU >  0.5) cu -= 1.0;
-                if (cu - refU < -0.5) cu += 1.0;
-                const cv = rawCUV.v;
-
-                if (!pointInPolygonUV(cu, cv, norm)) {
-                    // winding이 뒤집힌 상태 → 반전해서 올바른 안쪽을 inside로 교정
-                    norm.reverse();
-                }
-            }
-
-            // UV 바운딩박스 → 픽셀 범위 계산
-            let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
-            norm.forEach(p => {
-                minU = Math.min(minU, p.u); maxU = Math.max(maxU, p.u);
-                minV = Math.min(minV, p.v); maxV = Math.max(maxV, p.v);
+            // 3. 폴리곤을 Gnomonic 공간으로 투영 (대원호가 직선이 되는 공간)
+            let maxCos = 1.0;
+            const poly2D = polygon3D.map(p => {
+                const pn = p.clone().normalize();
+                const d = pn.dot(center);
+                if (d < maxCos) maxCos = d;
+                return { x: pn.dot(right) / d, y: pn.dot(localUp) / d };
             });
-            // ★ v8 BUG-B FIX: 날짜변경선 wrap-around 지원
-            // normalizePolyUV로 u가 음수 또는 1 초과가 된 경우에도 올바르게 픽셀 순회.
-            // gxMin/gxMax를 클램프하지 않고 rawGx 범위로 순회한 뒤
-            // wrapGx()로 실제 픽셀 인덱스를 가져오고, pointInPolygonUV 판정엔
-            // wrap 전 원시 u 좌표(puRaw)를 사용해 연속성을 보장.
-            const rawGxMin = Math.floor(minU * biomeWidth) - 1;
-            const rawGxMax = Math.ceil(maxU * biomeWidth) + 1;
-            const gyMin = Math.max(0, Math.floor(minV * biomeHeight) - 1);
-            const gyMax = Math.min(biomeHeight - 1, Math.ceil(maxV * biomeHeight) + 1);
-            if (rawGxMax < rawGxMin || gyMax < gyMin) return;
 
-            // 경도 방향 wrap: [0, biomeWidth) 범위로 정규화
-            function wrapGx(x) {
-                return ((x % biomeWidth) + biomeWidth) % biomeWidth;
-            }
+            // Gnomonic 2D Bounding Box
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            poly2D.forEach(p => {
+                minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+            });
 
-            // 레이캐스팅으로 내부 픽셀 수집
+            const limitCos = Math.max(-0.2, maxCos - 0.02); // 탐색 범위 한계값
+
+            // 연산 최적화를 위한 픽셀 탐색 범위 축소 (UV 기반 추정)
+            const cuv = getUV(center);
+            const radiusAngle = Math.acos(Math.max(-1, Math.min(1, limitCos)));
+            const radiusV = radiusAngle / Math.PI;
+            const cosLat = Math.max(0.1, Math.sin(Math.acos(center.y)));
+            const radiusU = radiusAngle / (Math.PI * 2 * cosLat);
+
+            let gyMin = Math.max(0, Math.floor((cuv.v - radiusV) * biomeHeight) - 2);
+            let gyMax = Math.min(biomeHeight - 1, Math.ceil((cuv.v + radiusV) * biomeHeight) + 2);
+            
+            const scanAllX = (radiusU > 0.25 || cuv.v - radiusV < 0 || cuv.v + radiusV > 1);
+            let gxMin = scanAllX ? 0 : Math.floor((cuv.u - radiusU) * biomeWidth) - 2;
+            let gxMax = scanAllX ? biomeWidth - 1 : Math.ceil((cuv.u + radiusU) * biomeWidth) + 2;
+
+            function wrapGx(x) { return ((x % biomeWidth) + biomeWidth) % biomeWidth; }
+
             const capPixels = [];
-            const seenOi = new Set(); // wrap으로 같은 픽셀이 중복 처리되지 않도록
+            const seenOi = new Set();
+
             for (let gy = gyMin; gy <= gyMax; gy++) {
                 const pv = (gy + 0.5) / biomeHeight;
-                for (let rawGx = rawGxMin; rawGx <= rawGxMax; rawGx++) {
+                const theta = (0.5 - pv) * Math.PI;
+                const pY = Math.sin(theta);
+                const cosTheta = Math.cos(theta);
+
+                for (let rawGx = gxMin; rawGx <= gxMax; rawGx++) {
                     const gx = wrapGx(rawGx);
                     if (!isLandPixelSingle(gx, gy)) continue;
-                    // pointInPolygonUV에는 wrap 전 원시 u 사용 (norm과 동일한 연속성 공간)
-                    const puRaw = (rawGx + 0.5) / biomeWidth;
-                    if (!pointInPolygonUV(puRaw, pv, norm)) continue;
-                    const oi = gy * biomeWidth + gx;
-                    if (seenOi.has(oi)) continue;
-                    seenOi.add(oi);
-                    if (ownershipMap[oi] !== playerIdx + 1) {
-                        capPixels.push({ oi, prev: ownershipMap[oi], gy }); // ★ BUG-1 FIX: gy 저장
+
+                    const pu = (gx + 0.5) / biomeWidth;
+                    const phi = pu * Math.PI * 2;
+                    
+                    const pX = -Math.cos(phi) * cosTheta;
+                    const pZ =  Math.sin(phi) * cosTheta;
+
+                    // 1차 필터링: Bounding Sphere 외곽 픽셀 즉시 스킵
+                    const d = pX * center.x + pY * center.y + pZ * center.z;
+                    if (d < limitCos) continue;
+
+                    // 2차 필터링: 2D Gnomonic 평면으로 투영 후 2D Bounding Box 검사
+                    const projX = (pX * right.x + pY * right.y + pZ * right.z) / d;
+                    const projY = (pX * localUp.x + pY * localUp.y + pZ * localUp.z) / d;
+                    if (projX < minX || projX > maxX || projY < minY || projY > maxY) continue;
+
+                    // 3차 정밀 판정: 2D 평면에서의 완벽한 Even-Odd 레이캐스팅
+                    let inside = false;
+                    for (let i = 0, j = poly2D.length - 1; i < poly2D.length; j = i++) {
+                        const xi = poly2D[i].x, yi = poly2D[i].y;
+                        const xj = poly2D[j].x, yj = poly2D[j].y;
+                        if (((yi > projY) !== (yj > projY)) && 
+                            (projX < (xj - xi) * (projY - yi) / (yj - yi) + xi)) {
+                            inside = !inside;
+                        }
+                    }
+
+                    if (inside) {
+                        const oi = gy * biomeWidth + gx;
+                        if (seenOi.has(oi)) continue;
+                        seenOi.add(oi);
+                        if (ownershipMap[oi] !== playerIdx + 1) {
+                            capPixels.push({ oi, prev: ownershipMap[oi], gy });
+                        }
                     }
                 }
             }
 
-            // ★ v8 BUG-C FIX: 15% 하드캡 제거
-            // 기획 의도: "크기에 상관없이 닫힌 루프는 무조건 점령된다"
-            // MAX_LAND_FRAC 조건 블록 완전 삭제.
-
-            let newCapture = 0.0, stolen = 0.0; // ★ BUG-1 FIX: 가중치 누산 (float)
+            const otherIdx = playerIdx === 0 ? 1 : 0;
+            let newCapture = 0.0, stolen = 0.0;
             let paintXMin = biomeWidth, paintYMin = biomeHeight, paintXMax = 0, paintYMax = 0;
+            
             capPixels.forEach(({ oi, prev, gy }) => {
                 const gx = oi % biomeWidth;
                 ownershipMap[oi] = playerIdx + 1;
-                const w = pixelWeight(gy); // ★ BUG-1 FIX: 위도 가중치
+                const w = pixelWeight(gy); 
                 playerLandPixels[playerIdx] += w;
                 if (prev === otherIdx + 1) {
                     playerLandPixels[otherIdx] -= w;
@@ -2458,8 +2473,6 @@
 
             if (newCapture <= 0) return;
 
-            // ★ v8 BUG-B FIX 후속: rawGxMin/rawGxMax가 음수·biomeWidth 초과일 수 있으므로
-            // 실제 칠해진 픽셀의 bounding box(paintXMin..paintYMax)를 repaint 범위로 사용
             repaintRegion(
                 Math.max(0, paintXMin), Math.max(0, paintYMin),
                 Math.min(biomeWidth - 1, paintXMax), Math.min(biomeHeight - 1, paintYMax)
@@ -2467,24 +2480,15 @@
             updateTerritoryScores();
 
             const pct = (newCapture / totalLandPixels * 100).toFixed(2);
-            // 피드백 위치: 폴리곤 UV 중심을 3D로 역변환
-            const midUV = norm[Math.floor(norm.length / 2)];
-            const theta = (0.5 - midUV.v) * Math.PI;
-            const phi   = (midUV.u * 2 - 1) * Math.PI;
-            const midPos = new THREE.Vector3(
-                -Math.cos(phi) * Math.cos(theta),
-                 Math.sin(theta),
-                 Math.sin(phi) * Math.cos(theta)
-            ).multiplyScalar(CONFIG.earthRadius);
-
             let msg = `+${pct}%`;
+            const textPos = center.clone().multiplyScalar(CONFIG.earthRadius + 0.1);
             if (stolen > 0) {
                 msg = `⚔️ 탈취! +${pct}%  (${(stolen / totalLandPixels * 100).toFixed(2)}% 강탈)`;
                 playSound('steal');
-                showFloatingText(msg, midPos, '#FFD700');
+                showFloatingText(msg, textPos, '#FFD700');
             } else {
                 playSound('capture');
-                showFloatingText(msg, midPos, '#72D27E');
+                showFloatingText(msg, textPos, '#72D27E');
             }
         }
 
@@ -2578,8 +2582,12 @@
                         forceLand = true;
                     }
 
-                    // ── 북극해 자체는 바다 유지 (극점 부근 순수 해빙) ──
-                    // 이미 biomeData가 밝음이면 바다로 남겨둠 → forceLand만 덮어씀
+                    // ── 북극 캡: 위도 85°N 이상 (남극 처리와 대칭) ──
+                    // 남극대륙(lat<-65°)과 동일한 방식으로 극점 주변을 육지로 강제 처리
+                    // → 남극과 공평하게 북극도 영역 점령 가능하도록 수정
+                    if (lat > 85) {
+                        forceLand = true;
+                    }
 
                     if (forceLand) {
                         biomeData[bi]   = 20;  // R: 어두움 = 육지
@@ -2654,6 +2662,7 @@
                 // ── 가상선 감지 시스템 (루프 감지 전용, 렌더링 없음) ──
                 // 모든 ghost 점은 구면 표면(earthRadius)에 정사영 → 고도 차이 = 0
                 allGhostPts:   [],    // ★ v7: 통합 버퍼 (육지+바다 구분 없음)
+                ghostBreaks:   new Set(), // ★ 추가: 턴 종료 및 바다 진입에 의한 단절 구간 기록
                 ghostSeg:      [],    // 하위 호환 보존 (미사용)
                 ghostLandSegs: [],    // 하위 호환 보존 (미사용)
                 shotsFired:    0,
@@ -2928,35 +2937,31 @@
             return null;
         }
 
-        // ── 지라르 정리(Girard's Theorem) 기반 구면 삼각형 면적 ─────────
-        function sphericalTriangleArea(A, B, C) {
-            // 꼭짓점 Q에서의 내각: QP 및 QR 방향의 접선벡터 사이 각도
-            function interiorAngle(P, Q, R) {
-                const qn = Q.clone().normalize();
-                const tP = P.clone().normalize()
-                    .sub(qn.clone().multiplyScalar(qn.dot(P.clone().normalize())))
-                    .normalize();
-                const tR = R.clone().normalize()
-                    .sub(qn.clone().multiplyScalar(qn.dot(R.clone().normalize())))
-                    .normalize();
-                return Math.acos(Math.max(-1, Math.min(1, tP.dot(tR))));
-            }
-            const excess = interiorAngle(C, A, B)
-                         + interiorAngle(A, B, C)
-                         + interiorAngle(B, C, A)
-                         - Math.PI;
-            return Math.max(0, excess) * CONFIG.earthRadius * CONFIG.earthRadius;
-        }
-
-        // 구면 다각형 면적: 첫 점 기준 삼각형 분할(fan triangulation)
-        // pts: THREE.Vector3[] (earthRadius 크기)
+        // ── Gnomonic 투영 기반 오목 다각형 완벽 대응 면적 계산 ─────────
         function sphericalPolygonArea(pts) {
             if (pts.length < 3) return 0;
+            const center = new THREE.Vector3();
+            pts.forEach(p => center.add(p));
+            if (center.lengthSq() < 0.0001) center.copy(pts[0]);
+            center.normalize();
+            
+            const up = new THREE.Vector3(0, 1, 0);
+            let right = new THREE.Vector3().crossVectors(up, center);
+            if (right.lengthSq() < 0.001) right = new THREE.Vector3(1, 0, 0).crossVectors(new THREE.Vector3(0,0,1), center);
+            right.normalize();
+            const localUp = new THREE.Vector3().crossVectors(center, right).normalize();
+            
             let area = 0;
-            for (let i = 1; i <= pts.length - 2; i++) {
-                area += sphericalTriangleArea(pts[0], pts[i], pts[i + 1]);
+            for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+                const pi = pts[i].clone().normalize();
+                const pj = pts[j].clone().normalize();
+                const di = pi.dot(center), dj = pj.dot(center);
+                if (di <= 0 || dj <= 0) continue; 
+                const xi = pi.dot(right) / di, yi = pi.dot(localUp) / di;
+                const xj = pj.dot(right) / dj, yj = pj.dot(localUp) / dj;
+                area += (xj + xi) * (yj - yi);
             }
-            return area;
+            return Math.abs(area) * 0.5 * CONFIG.earthRadius * CONFIG.earthRadius;
         }
 
         // ==========================================
@@ -2981,14 +2986,32 @@
             const ea = pts[n - 2];
             const eb = pts[n - 1];
 
+            // ★ v12 BUG-A FIX: 마지막 선분(ea→eb) 자체가 단절이면 즉시 종료
+            if (player.ghostBreaks.has(n - 2)) return false;
+
             for (let pi = 0; pi < n - 1 - MIN_GAP; pi++) {
+                // ★ v12 BUG-A FIX: ghostBreaks 체크를 3단계로 분리
+                // [기존 오류] k=pi~n-2 전체 순회 → 정상 루프도 차단 + 루프 경로 밖 break에 반응하는 오판 동시 발생
+                // [수정] STEP 1: 비교 선분 자체가 단절인지
+                //        STEP 2: 루프 경로(pi+1 ~ n-2) 내부에만 break 있는지
+                //        STEP 3: 교차 판정 진행
+
+                // STEP 1: 비교 대상 선분 pts[pi]→pts[pi+1] 자체가 단절인지
+                if (player.ghostBreaks.has(pi)) continue;
+
+                // STEP 2: 루프 경로(pi+1 이상 ~ n-2 이하) 내부에 단절이 있는지
+                let hasBreakInLoop = false;
+                for (let k = pi + 1; k < n - 1; k++) {
+                    if (player.ghostBreaks.has(k)) { hasBreakInLoop = true; break; }
+                }
+                if (hasBreakInLoop) continue;
+
+                // STEP 3: 교차 판정
                 const ix = arcIntersect3D(ea, eb, pts[pi], pts[pi + 1]);
                 if (!ix) continue;
 
                 const ixN = ix.clone().setLength(CONFIG.earthRadius + 0.025);
 
-                // pathA: 교차점 → [pi+1 .. n-2] → 교차점  (방금 그린 닫힌 루프만)
-                // pathB는 생성하지 않음 — 꼬리 길이에 무관하게 pathA = 정답
                 const pathA = [ixN];
                 for (let k = pi + 1; k < n - 1; k++) pathA.push(pts[k]);
                 pathA.push(ixN);
@@ -2996,7 +3019,8 @@
                 if (pathA.length < CONFIG.minLoopLength) continue;
 
                 createTerritoryArea(pathA, playerIdx);
-                player.allGhostPts = [];   // 루프 완성 → 버퍼 리셋
+                player.allGhostPts = [];    // 루프 완성 → 버퍼 리셋
+                player.ghostBreaks.clear(); // 단절 기록도 함께 초기화
                 if (playerIdx === 0) gameState.player1.loops++;
                 else                 gameState.player2.loops++;
                 updateStats();
@@ -3014,22 +3038,20 @@
         // ==========================================
 
         // ==========================================
-        // ADD GHOST — 3D 구면 좌표로 가상선 기록 (v9)
+        // ADD GHOST — 3D 구면 좌표로 가상선 기록 (v12)
         // ─────────────────────────────────────────
-        // ghost 점을 THREE.Vector3로 저장 (UV 변환 없음 → 날짜변경선 불연속 없음)
-        // 바다: ghostSeg 닫고 저장 (같은 발사 내 sameRun=true)
-        // 다른 턴: switchTurn에서 sameRun=false로 저장
-        // 보간: rawPos 간격이 크면 ghostSpacing 단위로 중간 점 삽입
+        // ★ v12 핵심 개선: 보간 루프 내부에서 매 중간점마다 getBiome() 검사 (패치 1)
+        //   기존(v11.8): 게임루프에서 curPos 단 한 번만 체크 → 고속 이동 시 바다 통과 누락
+        //   개선(v12):   보간 경로 전체를 촘촘히 스캔 → 바다 진입 첫 순간에 정확히 break 삽입
+        //   ghostPrevPos: 항상 마지막 육지 점만 저장 보장 (바다 점은 저장하지 않음)
+        //   바다 단절 마커 삽입 권한: addGhost() 내부로 완전 위임 (패치 2)
         // ==========================================
         let ghostPrevPos = [null, null];
 
         function addGhostPoint(idx, rawPos) {
-            // ★ v7: 육지/바다 구분 없이 단일 버퍼에 누적
-            // 바다 좌표가 포함되어도 createTerritoryArea 내부에서 isLandPixelSingle로 필터링되므로
-            // 바다 픽셀은 절대 채워지지 않음. 교차 감지만 이 버퍼로 수행.
+            // ★ v12: addGhost() 내부에서 육지 점만 걸러 전달하므로
+            //        이 함수에서 별도 육지/바다 구분 불필요.
             // ★ v9 BUG-F FIX: 잉크 소진 시 ghost 누적도 차단
-            // 기존: ink≤0이어도 addGhost→ghost 누적→루프 점령 가능 (addTrail 차단과 불일치)
-            // 수정: ink≤0이면 ghost 누적 및 루프 감지 모두 정지 → 잉크 시스템 일관성 확보
             const psState = idx === 0 ? gameState.player1 : gameState.player2;
             if (psState.ink <= 0) return;
 
@@ -3041,26 +3063,56 @@
         }
 
         function addGhost(idx, rawPos) {
-            const prev = ghostPrevPos[idx];
-            const curr = rawPos.clone().normalize().multiplyScalar(CONFIG.earthRadius + 0.001);
+            const prev   = ghostPrevPos[idx];
+            const curr   = rawPos.clone().normalize().multiplyScalar(CONFIG.earthRadius + 0.001);
+            const pState = players[idx];
 
             if (prev === null) {
-                ghostPrevPos[idx] = curr.clone();
-                addGhostPoint(idx, curr);
+                // ★ v12: 첫 진입점도 육지 여부 확인 (기존: 무조건 addGhostPoint 호출)
+                if (getBiome(curr) === 'LAND') {
+                    ghostPrevPos[idx] = curr.clone();
+                    addGhostPoint(idx, curr);
+                } else {
+                    // 바다에서 재시작 → break 마커 삽입 (중복 방지)
+                    if (pState.allGhostPts.length > 0 &&
+                        !pState.ghostBreaks.has(pState.allGhostPts.length - 1)) {
+                        pState.ghostBreaks.add(pState.allGhostPts.length - 1);
+                    }
+                }
                 return;
             }
 
-            // 두 위치 사이를 ghostSpacing 단위로 보간해 촘촘히 샘플링
+            // ★ v12: 두 위치 사이를 ghostSpacing 단위로 보간, 매 중간점마다 getBiome() 검사
+            // prev는 항상 직전에 기록된 육지 점이 보장되므로 wasOnLand 초기값 = true 유효
             const totalDist = prev.distanceTo(curr);
-            const steps = Math.max(1, Math.ceil(totalDist / CONFIG.ghostSpacing));
+            const steps     = Math.max(1, Math.ceil(totalDist / CONFIG.ghostSpacing));
+            let wasOnLand   = true; // prev는 육지 점만 저장되므로 초기값 항상 true
+
             for (let i = 1; i <= steps; i++) {
-                const t = i / steps;
+                const t      = i / steps;
                 const interp = prev.clone().lerp(curr, t)
-                    .normalize().multiplyScalar(CONFIG.earthRadius + 0.001);
-                addGhostPoint(idx, interp);
+                                   .normalize().multiplyScalar(CONFIG.earthRadius + 0.001);
+                const nowOnLand = getBiome(interp) === 'LAND';
+
+                if (nowOnLand) {
+                    addGhostPoint(idx, interp);
+                } else {
+                    // 육지→바다 전환 순간에만 단절 마커 삽입 (중복 방지)
+                    if (wasOnLand && pState.allGhostPts.length > 0 &&
+                        !pState.ghostBreaks.has(pState.allGhostPts.length - 1)) {
+                        pState.ghostBreaks.add(pState.allGhostPts.length - 1);
+                    }
+                }
+                wasOnLand = nowOnLand;
             }
 
-            ghostPrevPos[idx] = curr.clone();
+            // ghostPrevPos: 마지막 보간점이 육지면 저장, 바다면 null → 항상 육지 점 보장
+            if (wasOnLand) {
+                ghostPrevPos[idx] = curr.clone().normalize()
+                                        .multiplyScalar(CONFIG.earthRadius + 0.001);
+            } else {
+                ghostPrevPos[idx] = null;
+            }
         }
 
         // ==========================================
@@ -3207,10 +3259,15 @@
                     // ── 튜토리얼: 현재 선분 확정 + 루프 감지 ──
                     tutFinalizeTurn(prevPlayerIdx);
                 } else {
-                    // ── 노멀: ★ v7 — allGhostPts는 턴이 바뀌어도 보존
-                    // (여러 턴에 걸친 루프를 허용하기 위해 flush하지 않음)
-                    prevPlayer.currentSegment = [];
-                    ghostPrevPos[prevPlayerIdx] = null;
+                // ── 노멀: ★ v7 — allGhostPts는 턴이 바뀌어도 보존
+                // (여러 턴에 걸친 루프를 허용하기 위해 flush하지 않음)
+                // ★ v12: 턴 전환 시 텔레포트 연결 방지 break 삽입 (중복 방지 조건 추가)
+                if (prevPlayer.allGhostPts.length > 0 &&
+                    !prevPlayer.ghostBreaks.has(prevPlayer.allGhostPts.length - 1)) {
+                    prevPlayer.ghostBreaks.add(prevPlayer.allGhostPts.length - 1);
+                }
+                prevPlayer.currentSegment = [];
+                ghostPrevPos[prevPlayerIdx] = null;
                 }
             }
 
@@ -3390,29 +3447,44 @@
         }
 
         // ★ 궤적 미리보기에 실제 물리(중력+코리올리) 반영
+        // ★ 궤적 미리보기에 Cannon.js 물리 엔진(Semi-implicit Euler) 완벽 동기화
         function updateTrajectory(startPos, impulseVector) {
-            const dt = 0.016;
+            const dt = 1/60; // Cannon.js 기본 step 시간
             const simPos = startPos.clone();
-            const simVel = impulseVector.clone().multiplyScalar(dt / CONFIG.mass);
+            // 1. 초기 속도: 충격량(Impulse) / 질량(Mass) — dt 곱하기 오류 제거
+            const simVel = impulseVector.clone().multiplyScalar(1 / CONFIG.mass);
             const positions = trajLine.geometry.attributes.position.array;
             const omega = new THREE.Vector3(0, 1, 0);
+            
+            // Cannon.js 내부 선형 감쇠 공식 적용
+            const powDamp = Math.pow(1.0 - CONFIG.damping, dt);
 
             for (let i = 0; i < TRAJ_POINTS; i++) {
                 positions[i * 3]     = simPos.x;
                 positions[i * 3 + 1] = simPos.y;
                 positions[i * 3 + 2] = simPos.z;
 
-                // 구면 중력 (실제 물리와 동일 수식)
+                // 2. 중력에 의한 속도 변화 (Δv = F/m * dt = gravity * dt)
                 const gravDir = simPos.clone().normalize().negate();
-                const gravAcc = gravDir.multiplyScalar(CONFIG.gravity * dt * dt);
+                const gravDeltaV = gravDir.multiplyScalar(CONFIG.gravity * dt);
 
-                // 코리올리 (실제 적용 수식과 동일)
-                const coriolisAcc = simVel.clone().cross(omega)
-                    .multiplyScalar(CONFIG.coriolisFactor * dt);
+                // 3. 코리올리 힘에 의한 속도 변화 (임계속도 0.1 이상일 때만)
+                let coriolisDeltaV = new THREE.Vector3(0, 0, 0);
+                if (simVel.lengthSq() > 0.1) {
+                    const posN = simPos.clone().normalize();
+                    const lat = Math.asin(Math.max(-1, Math.min(1, posN.y)));
+                    const latScale = Math.abs(Math.sin(lat));
+                    const coriolisForce = simVel.clone().cross(omega)
+                        .multiplyScalar(CONFIG.coriolisFactor * (0.3 + 0.7 * latScale));
+                    coriolisDeltaV = coriolisForce.multiplyScalar(dt / CONFIG.mass);
+                }
 
-                simVel.add(gravAcc).add(coriolisAcc);
-                simVel.multiplyScalar(1 - CONFIG.damping * dt);
-                simPos.add(simVel);
+                // 4. 속도 누산 및 감쇠 (Semi-implicit Euler 적분)
+                simVel.add(gravDeltaV).add(coriolisDeltaV);
+                simVel.multiplyScalar(powDamp);
+                
+                // 5. 위치 누산 (Δp = v * dt)
+                simPos.addScaledVector(simVel, dt);
 
                 if (simPos.length() < CONFIG.earthRadius + CONFIG.playerRadius) {
                     simPos.setLength(CONFIG.earthRadius + CONFIG.playerRadius + 0.02);
@@ -3835,11 +3907,15 @@
                         tutAddPoint(idx, curPos);
                     } else {
                         // ── 노멀: ghost + 점 트레일 ──
+                        // ★ v12 패치 2: 바다 단절 처리 권한을 addGhost() 내부로 완전 위임
+                        // 기존: 여기서 onLand 체크 후 바다면 외부에서 직접 break 삽입 (중복/누락 위험)
+                        // 개선: addGhost() 내부의 보간 루프가 더 정밀하게 단절 처리 담당
                         if (speed > CONFIG.ghostSpeedThreshold) {
                             addGhost(idx, curPos);
                         } else if (speed <= CONFIG.ghostSpeedThreshold && ghostPrevPos[idx] !== null) {
                             ghostPrevPos[idx] = null;
                         }
+
                         if (speed > CONFIG.trailSpeedThreshold && gameState.settings.showTrails) {
                             const d = curPos.distanceTo(player.lastTrailPos);
                             if (d > CONFIG.trailSpacing) {
@@ -4190,6 +4266,13 @@
                     if (m) { scene.remove(m); m.geometry?.dispose(); }
                 });
                 fortressState.launchMeshes = [null, null];
+                // ★ BUG-FIX: previewArrow 씬에서 제거 (재시작 시 고스트 화살표 방지)
+                if (fortressState.previewArrow) {
+                    scene.remove(fortressState.previewArrow);
+                    fortressState.previewArrow.line?.geometry?.dispose();
+                    fortressState.previewArrow.cone?.geometry?.dispose();
+                    fortressState.previewArrow = null;
+                }
                 clearImpactMarkers && clearImpactMarkers();
                 const hud = document.getElementById('fortress-hud');
                 if (hud) hud.classList.remove('active');
@@ -4206,8 +4289,7 @@
                 t.points = [];
             });
 
-            // ghost 초기화
-            ghosts.forEach(g => { g.points = []; });
+            // 레거시 ghosts 배열 초기화 코드 삭제 완료
             // ★ v7: allGhostPts 초기화
             players.forEach(p => { p.allGhostPts = []; });
             ghostPrevPos[0] = null; ghostPrevPos[1] = null;
@@ -4511,8 +4593,21 @@
 
         // ── 조준각 조정 ──────────────────────────────────────────────────
         function rotateAim(playerIdx, deltaRad) {
-            fortressState.aimAngle[playerIdx] =
-                (fortressState.aimAngle[playerIdx] + deltaRad + Math.PI * 4) % (Math.PI * 2);
+            // 카메라 시점 기준 화면상 좌우 회전으로 매핑 (deltaRad > 0 이면 화면의 오른쪽으로 회전)
+            const lp = fortressState.launchPos[playerIdx] || players[playerIdx].body.position;
+            const up = lp.clone().normalize();
+
+            const curDir = getFortressAimDir(playerIdx);
+            // up 벡터(지표면 법선)를 축으로 회전. 시계방향(-)이 화면상 오른쪽.
+            curDir.applyAxisAngle(up, -deltaRad);
+
+            const worldY  = new THREE.Vector3(0, 1, 0);
+            let northRef  = worldY.clone().sub(up.clone().multiplyScalar(worldY.dot(up)));
+            if (northRef.lengthSq() < 0.001) northRef = new THREE.Vector3(0, 0, 1).sub(up.clone().multiplyScalar(new THREE.Vector3(0, 0, 1).dot(up)));
+            northRef.normalize();
+            const eastRef = new THREE.Vector3().crossVectors(up, northRef).normalize();
+
+            fortressState.aimAngle[playerIdx] = Math.atan2(curDir.dot(eastRef), curDir.dot(northRef));
             updateFortressPreview();
         }
 
@@ -4630,18 +4725,29 @@
                 if (northProj.lengthSq() < 0.001) northProj = new THREE.Vector3(0,0,1).sub(up2.clone().multiplyScalar(new THREE.Vector3(0,0,1).dot(up2)));
                 northProj.normalize();
                 const eastVec = new THREE.Vector3().crossVectors(up2, northProj).normalize();
+
+                // 지리적 bearing은 텍스트 표시용으로만 유지
                 const bearing = (Math.atan2(horizDir.dot(eastVec), horizDir.dot(northProj)) * 180 / Math.PI + 360) % 360;
                 joyBearingEl.textContent = bearing.toFixed(0) + '°';
-
-                // ★ v7: 우하단 bearing도 동기화
                 const brBearingEl = document.getElementById('fort-br-joy-bearing');
                 if (brBearingEl) brBearingEl.textContent = bearing.toFixed(0) + '°';
 
-                // ★ thumb idle 기울임: HUD 조이스틱 + 우하단 조이스틱 공통
-                const bearingRad = bearing * Math.PI / 180;
+                // ★ thumb idle 기울임 (Screen-relative 기준)
+                const camUp2 = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+                let camUpProj2 = camUp2.clone().sub(up2.clone().multiplyScalar(camUp2.dot(up2))).normalize();
+                if (camUpProj2.lengthSq() < 0.001) {
+                    const camRight2 = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+                    camUpProj2 = new THREE.Vector3().crossVectors(camRight2, up2).normalize();
+                }
+                const camRightProj2 = new THREE.Vector3().crossVectors(camUpProj2, up2).normalize();
+
+                const screenX = horizDir.dot(camRightProj2);
+                const screenY = horizDir.dot(camUpProj2);
+                const screenAngle = Math.atan2(screenY, screenX);
+
                 const IDLE_R = 10;
-                const itx = Math.sin(bearingRad) * IDLE_R;
-                const ity = -Math.cos(bearingRad) * IDLE_R;
+                const itx = Math.cos(screenAngle) * IDLE_R;
+                const ity = -Math.sin(screenAngle) * IDLE_R;
                 const idleTransform = `translate(calc(-50% + ${itx.toFixed(1)}px), calc(-50% + ${ity.toFixed(1)}px))`;
 
                 const thumb2 = document.getElementById('fort-joystick-thumb');
@@ -4872,10 +4978,32 @@
                 controls.update();
 
                 // ★ Swept-sphere 착탄 판정: 이전 위치~현재 위치 사이 구 표면 통과 여부 확인
-                const prevDist = prevPos.length();
-                const currDist = pos.length();
-                const hit     = currDist <= R + 0.07 ||
-                                (prevDist > R + 0.07 && currDist < prevDist && currDist <= R + 0.18);
+                // ★ Ray-Sphere Intersection: 엄밀한 2차 방정식 근의 공식 기반 연속 충돌 감지(CCD)
+                const targetR = R + 0.07;
+                const vDir = new THREE.Vector3().subVectors(pos, prevPos);
+                const a = vDir.lengthSq();
+                const b = 2 * prevPos.dot(vDir);
+                const c = prevPos.lengthSq() - targetR * targetR;
+                
+                let hit = false;
+                
+                if (a > 1e-8) {
+                    const discriminant = b * b - 4 * a * c;
+                    if (discriminant >= 0) {
+                        const sqrtD = Math.sqrt(discriminant);
+                        const t1 = (-b - sqrtD) / (2 * a);
+                        const t2 = (-b + sqrtD) / (2 * a);
+                        // t가 0~1 사이면 이번 프레임 이동 경로(prevPos -> pos)에서 지표면 관통 발생
+                        if ((t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1)) {
+                            hit = true;
+                            const tHit = (t1 >= 0 && t1 <= 1) ? t1 : t2;
+                            // 관통한 정확한 교차 지점으로 미사일 위치 강제 보정
+                            pos.copy(prevPos).add(vDir.multiplyScalar(tHit));
+                        }
+                    }
+                } else if (prevPos.length() <= targetR) {
+                    hit = true; // 속도가 0에 수렴하는데 이미 타겟 반경 안에 있는 경우
+                }
                 const timeout = step >= FORTRESS_CONFIG.MAX_STEPS;
                 // ★ A-10: 궤도 이탈(지구 반경×4 초과) 조기 종료
                 const tooFar  = pos.length() > CONFIG.earthRadius * 4;
@@ -5164,23 +5292,39 @@
                     if (dist < DEAD) return;
 
                     const idx = gameState.currentPlayer - 1;
-                    const azDelta = (tx / MAX_R) * (8 * Math.PI / 180);
-                    rotateAim(idx, azDelta);
 
-                    const elevEl = document.getElementById('fort-elev');
-                    const valEl  = document.getElementById('fort-elev-val');
-                    if (elevEl) {
-                        const elevDelta = -(ty / MAX_R) * 2.5;
-                        const newElev = Math.max(5, Math.min(85,
-                            parseFloat(elevEl.value) + elevDelta));
-                        elevEl.value = newElev;
-                        if (valEl) valEl.textContent = Math.round(newElev) + '°';
-                        updateFortressPreview();
+                    // ── 절대 방향 (Screen-relative) 3D 벡터 매핑 ──
+                    const jx = tx;
+                    const jy = -ty; // DOM Y는 아래가 +, 3D 화면상 위가 +
+
+                    const lp = (fortressState.launchPos[idx] || players[idx].body.position).clone().normalize();
+                    const up = lp;
+                    const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+                    let camUpProj = camUp.clone().sub(up.clone().multiplyScalar(camUp.dot(up))).normalize();
+                    if (camUpProj.lengthSq() < 0.001) {
+                        const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+                        camUpProj = new THREE.Vector3().crossVectors(camRight, up).normalize();
                     }
+                    const camRightProj = new THREE.Vector3().crossVectors(camUpProj, up).normalize();
+
+                    // 조이스틱 벡터를 화면 접평면 상의 방향 벡터로 변환
+                    const desiredDir = camRightProj.clone().multiplyScalar(jx)
+                        .add(camUpProj.clone().multiplyScalar(jy)).normalize();
+
+                    // 글로벌 기준 벡터(North)로 aimAngle 역계산
+                    const worldY  = new THREE.Vector3(0, 1, 0);
+                    let northRef  = worldY.clone().sub(up.clone().multiplyScalar(worldY.dot(up)));
+                    if (northRef.lengthSq() < 0.001) northRef = new THREE.Vector3(0, 0, 1).sub(up.clone().multiplyScalar(new THREE.Vector3(0, 0, 1).dot(up)));
+                    northRef.normalize();
+                    const eastRef = new THREE.Vector3().crossVectors(up, northRef).normalize();
+
+                    fortressState.aimAngle[idx] = Math.atan2(desiredDir.dot(eastRef), desiredDir.dot(northRef));
+
                     if (bearingEl) {
                         const bearingDeg = (Math.atan2(tx, -ty) * 180 / Math.PI + 360) % 360;
                         bearingEl.textContent = bearingDeg.toFixed(0) + '°';
                     }
+                    updateFortressPreview();
                 }
                 function resetThumb() {
                     thumb.style.transform = 'translate(-50%, -50%)';
@@ -5264,6 +5408,7 @@
                     fortressState._aimDrag = { x: t.clientX, y: t.clientY };
                     const idx = gameState.currentPlayer - 1;
                     const anglePerPx = (2 * Math.PI) / 500;
+                    // rotateAim이 up축 기준 회전이므로 스크린 좌우가 자연스럽게 매핑됨
                     if (Math.abs(dx) > 0.3) rotateAim(idx, dx * anglePerPx);
                     if (Math.abs(dy) > 0.3) {
                         const elevEl = document.getElementById('fort-elev');
@@ -5300,6 +5445,7 @@
                 fortressState._aimDrag = { x: e.clientX, y: e.clientY };
                 const idx = gameState.currentPlayer - 1;
                 const anglePerPx = (2 * Math.PI) / 500;
+                // rotateAim이 up축 기준 회전이므로 스크린 좌우가 자연스럽게 매핑됨
                 if (Math.abs(dx) > 0.5) rotateAim(idx, dx * anglePerPx);
                 if (Math.abs(dy) > 0.5) {
                     const elevEl = document.getElementById('fort-elev');
