@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VFX → Three.js 통합 증명 — FX-01 그대로 이식</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0c10;overflow:hidden;font-family:"JetBrains Mono",ui-monospace,monospace;}
+  #three-cv{position:fixed;inset:0;display:block;cursor:crosshair;}
+  #vfx-sprite{position:fixed;pointer-events:none;border-radius:6px;
+    box-shadow:0 0 0 1px rgba(255,255,255,.08);transform:translate(-50%,-50%);
+    transition:opacity .25s; opacity:0;}
+  #panel{position:fixed;top:14px;left:14px;max-width:340px;background:rgba(10,12,16,.86);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 16px;color:#dfe3ea;
+    font-size:12px;line-height:1.55;backdrop-filter:blur(6px);}
+  #panel b{color:#7fe0ff;}
+  #panel .tag{display:inline-block;background:#1c2330;border:1px solid #2c3650;color:#9fd6ff;
+    border-radius:4px;padding:1px 6px;font-size:10.5px;margin-right:4px;}
+  #panel .step{margin:3px 0 3px 0;padding-left:14px;position:relative;}
+  #panel .step::before{content:"›";position:absolute;left:0;color:#ffb14e;}
+  #hud{position:fixed;bottom:14px;left:14px;color:#7a8290;font-size:11px;letter-spacing:.03em;}
+  #hud b{color:#dfe3ea;}
+</style>
+</head>
+<body>
+
+<canvas id="three-cv"></canvas>
+<canvas id="vfx-sprite"></canvas>
+
+<div id="panel">
+  <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:6px;">VFX → Three.js 통합 증명</div>
+  <span class="tag">FX-01 코드 그대로</span><span class="tag">d.bg=false</span>
+  <div style="margin-top:10px">바닥을 클릭해보세요 — 클릭한 3D 지점 위로 기존 FX-01(결정 천사) 이펙트가 배경 없이(투명) 그대로 떠오릅니다.</div>
+  <div style="margin-top:10px;color:#8a93a3">동작 원리</div>
+  <div class="step">FX-01의 init/trigger/frame/hud — 로직은 한 글자도 안 고침</div>
+  <div class="step">d.bg=false 플래그만 추가 — 효과 자신의 배경 그라디언트를 생략, 그 자리를 clearRect로 비움</div>
+  <div class="step">작은 별도 캔버스(스프라이트)에 평소처럼 그림</div>
+  <div class="step">클릭한 3D 좌표를 매 프레임 화면 좌표로 투영(project)</div>
+  <div class="step">그 화면 좌표에 스프라이트 캔버스를 CSS로 위치만 이동</div>
+  <div style="margin-top:10px;color:#8a93a3">한계</div>
+  <div class="step">항상 화면 맨 위에 그려짐 — 3D 오브젝트에 가려지지 않음(진짜 깊이 차단 원하면 CanvasTexture+PlaneGeometry로 한 단계 더 필요)</div>
+</div>
+
+<div id="hud">cast: <b id="hud-xy">—</b> · drag = 궤도회전 · wheel = 줌</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ════════════════════════════════════════════════════════════
+   1) THREE.js 씬 — "게임 월드"를 흉내낸 평범한 3D 장면
+   ════════════════════════════════════════════════════════════ */
+const cv3 = document.getElementById('three-cv');
+const renderer = new THREE.WebGLRenderer({canvas:cv3, antialias:true});
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0c10);
+scene.fog = new THREE.Fog(0x0a0c10, 18, 60);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 500);
+let camDist=22, camAz=.78, camEl=.62;
+function updateCamera(){
+  camEl = Math.max(.15, Math.min(1.45, camEl));
+  camera.position.set(
+    camDist*Math.sin(camEl)*Math.sin(camAz),
+    camDist*Math.cos(camEl),
+    camDist*Math.sin(camEl)*Math.cos(camAz)
+  );
+  camera.lookAt(0,1.2,0);
+}
+updateCamera();
+
+scene.add(new THREE.HemisphereLight(0x88aaff, 0x101014, .9));
+const sun = new THREE.DirectionalLight(0xffe9c2, 1.1);
+sun.position.set(8,14,6); scene.add(sun);
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60,60,40,40),
+  new THREE.MeshStandardMaterial({color:0x1b2130, roughness:.95, metalness:.05, wireframe:false})
+);
+ground.rotation.x = -Math.PI/2; ground.name='ground'; scene.add(ground);
+
+const grid = new THREE.GridHelper(60, 30, 0x3a4660, 0x222838);
+grid.position.y = .01; scene.add(grid);
+
+// 장애물 몇 개 — "이게 진짜 3D 장면"이라는 걸 보여주기 위한 소품
+const obstacles = [];
+const boxMat = new THREE.MeshStandardMaterial({color:0x394a66, roughness:.6});
+[[-6,1,-3,2,2,2],[5,1.5,2,2,3,2],[1,.6,6,3,1.2,1.4],[-3,2,4,1.4,4,1.4]].forEach(p=>{
+  const m = new THREE.Mesh(new THREE.BoxGeometry(p[3],p[4],p[5]), boxMat);
+  m.position.set(p[0],p[1],p[2]); scene.add(m); obstacles.push(m);
+});
+
+function resize(){
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+// 마우스 드래그 = 궤도 회전 (OrbitControls 없이 간단 구현)
+let dragging=false, lastX=0, lastY=0;
+cv3.addEventListener('pointerdown', e=>{ if(e.button!==0) return; dragging=true; lastX=e.clientX; lastY=e.clientY; });
+addEventListener('pointerup', ()=>dragging=false);
+addEventListener('pointermove', e=>{
+  if(!dragging) return;
+  camAz -= (e.clientX-lastX)*.006; camEl -= (e.clientY-lastY)*.006;
+  lastX=e.clientX; lastY=e.clientY; updateCamera();
+});
+addEventListener('wheel', e=>{ camDist=Math.max(8,Math.min(40,camDist+e.deltaY*.02)); updateCamera(); }, {passive:true});
+
+/* ════════════════════════════════════════════════════════════
+   2) FX-01 "결정 천사" — VFX-merged-v41 파일의 코드를 그대로 복사.
+      init / trigger / frame / hud 전부 무수정.
+   ════════════════════════════════════════════════════════════ */
+const TAU=6.28318530718;
+function rot(v,i,j,a){const c=Math.cos(a),s=Math.sin(a),vi=v[i],vj=v[j];v[i]=vi*c-vj*s;v[j]=vi*s+vj*c;}
+function sd(s){s=Math.sin(s*127.1)*43758.5453;return s-Math.floor(s);}
+const DPR=Math.min(2,window.devicePixelRatio||1);
+
+const FX1=(function(){
+  const OCT=[[1,0,0,0],[-1,0,0,0],[0,1,0,0],[0,-1,0,0],[0,0,1,0],[0,0,-1,0]];
+  const OE=[[0,2],[0,3],[0,4],[0,5],[1,2],[1,3],[1,4],[1,5],[2,4],[2,5],[3,4],[3,5]];
+  const TS=[],TE=[];for(let i=0;i<16;i++)TS.push([(i&1?1:-1),(i&2?1:-1),(i&4?1:-1),(i&8?1:-1)]);
+  for(let a=0;a<16;a++)for(let b=a+1;b<16;b++){let f=0;for(let k=0;k<4;k++)if(TS[a][k]!==TS[b][k])f++;if(f===1)TE.push([a,b]);}
+  const P=[0,0,0,0],PA=new Float32Array(64),PB=new Float32Array(64);
+  function pj(s,o,n,ax,ay,az,aw,sc,cx,cy){for(let i=0;i<n;i++){P[0]=s[i][0];P[1]=s[i][1];P[2]=s[i][2];P[3]=s[i][3];rot(P,0,3,aw);rot(P,1,2,az);rot(P,0,1,ax);rot(P,1,3,ay);const k4=3/Math.max(0.05,3-P[3]);let x=P[0]*k4,y=P[1]*k4,z=P[2]*k4;const k3=4/Math.max(0.05,4.2-z);o[i*2]=cx+x*k3*sc;o[i*2+1]=cy+y*k3*sc;}}
+  function eg(c,p,e,col,al,lw){c.lineWidth=lw;c.strokeStyle=col;c.globalAlpha=al;c.shadowColor=col;c.shadowBlur=14;c.beginPath();for(let i=0;i<e.length;i++){const a=e[i][0],b=e[i][1];c.moveTo(p[a*2],p[a*2+1]);c.lineTo(p[b*2],p[b*2+1]);}c.stroke();c.shadowBlur=0;c.globalAlpha=1;}
+  return{init(d){if(!d._castBound){d._castBound=e=>{const r=d.canvas.getBoundingClientRect();this.trigger(d,(e.clientX-r.left)*DPR,(e.clientY-r.top)*DPR);};d.canvas.addEventListener('click',d._castBound);}},trigger(d,x,y){d.tx=x;d.ty=y;},frame(d){const c=d.ctx,W=d.W,H=d.H,cx=(d.tx!=null?d.tx:W/2),cy=(d.ty!=null?d.ty:H/2),T=d.t;if(d.bg===false){c.clearRect(0,0,W,H);}else{const g=c.createRadialGradient(cx,cy,0,cx,cy,Math.max(W,H)*.7);g.addColorStop(0,"#0a1430");g.addColorStop(1,"#04060f");c.fillStyle=g;c.fillRect(0,0,W,H);}c.save();c.globalCompositeOperation="lighter";const m=(Math.sin(T*.35)+1)/2,dp=Math.round(d.param*2)+1,b=Math.min(W,H)*.3,ax=T*.5,ay=T*.32,az=T*.21+d.burst*4,aw=T*.6+d.burst*3;for(let l=0;l<dp;l++){const s=Math.pow(.46,l),al=l===0?1:.3/l;if(m<.97){pj(OCT,PA,6,ax,ay,az,aw,b*s,cx,cy);eg(c,PA,OE,"#5ec8ff",(1-m)*al,l?1.4:2.6);}if(m>.03){pj(TS,PB,16,ax,ay,az,aw,b*.78*s,cx,cy);eg(c,PB,TE,"#9affe8",m*al,l?1.2:2);}}const cu=m<.5?PA:PB,cn=m<.5?6:16;c.fillStyle="#fff";for(let i=0;i<cn;i++){c.globalAlpha=.8;c.beginPath();c.arc(cu[i*2],cu[i*2+1],m<.5?2.6:1.8,0,TAU);c.fill();}c.restore();},hud(d){return(((Math.sin(d.t*.35)+1)/2)<.5?"OCTA":"TESSERACT")+" · "+d.fps+"FPS";}};
+})();
+
+/* ════════════════════════════════════════════════════════════
+   3) 브리지 — 3D 클릭 ↔ FX-01 스프라이트 캔버스
+   ════════════════════════════════════════════════════════════ */
+const spriteCv = document.getElementById('vfx-sprite');
+const SPRITE_CSS = 220; // 화면에 보이는 크기(css px) — 거리에 따라 살짝 스케일
+spriteCv.width = SPRITE_CSS*DPR; spriteCv.height = SPRITE_CSS*DPR;
+spriteCv.style.width = SPRITE_CSS+'px'; spriteCv.style.height = SPRITE_CSS+'px';
+
+const d = {
+  canvas: spriteCv, ctx: spriteCv.getContext('2d'),
+  W: spriteCv.width, H: spriteCv.height,
+  t:0, burst:0, param:.6, fps:60, tx:null, ty:null, bg:false /* ← 투명배경 모드: FX-01 자체 배경칠 생략 */
+};
+FX1.init(d); // 클릭 리스너는 spriteCv에 붙지만(원본 동작), 실제 캐스트는 3D 레이캐스트로 발생시킬 것이므로 무해함
+
+let castPoint = null;   // THREE.Vector3 — 마지막 캐스트의 3D 월드 좌표
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+
+cv3.addEventListener('click', e=>{
+  ndc.x = (e.clientX/innerWidth)*2-1;
+  ndc.y = -(e.clientY/innerHeight)*2+1;
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects([ground, ...obstacles]);
+  if(!hits.length) return;
+  castPoint = hits[0].point.clone();
+  castPoint.y += (hits[0].object===ground ? 1.4 : hits[0].object.geometry.parameters.height/2 + 1.0);
+  d.burst = 1; // FX-01의 폭발 파라미터 — 원본 그대로 사용
+  spriteCv.style.opacity = 1;
+});
+
+function projectToScreen(p){
+  const v = p.clone().project(camera);
+  return { x:(v.x*.5+.5)*innerWidth, y:(-v.y*.5+.5)*innerHeight, behind:v.z>1 };
+}
+
+/* ════════════════════════════════════════════════════════════
+   4) 메인 루프
+   ════════════════════════════════════════════════════════════ */
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(.05,(now-last)/1000); last=now;
+  d.t += dt; d.fps = Math.round(1/Math.max(dt,1e-3));
+  d.burst = Math.max(0, d.burst - dt*1.4);
+
+  if(castPoint){
+    const s = projectToScreen(castPoint);
+    if(s.behind){ spriteCv.style.opacity = 0; }
+    else{
+      const dist = camera.position.distanceTo(castPoint);
+      const scale = Math.max(.55, Math.min(1.6, 14/dist));
+      spriteCv.style.opacity = .96;
+      spriteCv.style.left = s.x+'px'; spriteCv.style.top = s.y+'px';
+      spriteCv.style.width = (SPRITE_CSS*scale)+'px';
+      spriteCv.style.height = (SPRITE_CSS*scale)+'px';
+      document.getElementById('hud-xy').textContent =
+        castPoint.x.toFixed(1)+', '+castPoint.y.toFixed(1)+', '+castPoint.z.toFixed(1)+'  (3D world)';
+    }
+  }
+  FX1.frame(d); // ← FX-01 원본 frame() 그대로 호출
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
