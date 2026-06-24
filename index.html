@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GlobeStriker Fortress</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#000; }
+
+  /* ── game container: position:relative 필수 (overlay canvas 기준점) */
+  #game {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<!-- ════════════════════════════════════════════════════════
+     LOAD ORDER  —  의존성 순서 엄수
+     ════════════════════════════════════════════════════════
+
+  [1] THREE.js
+  [2] Cannon.js (물리)
+  [3] VFX core — window.VFX + EffectPool 정의 (네 원본 파일)
+  [4] vfx-game-integration-2.js  (window.VFX 확장)
+  [5] vfx-three-bridge.js        (window.VFXThree, needs VFX + THREE)
+  [6] VFX3D_FORTRESS.js          (window.VFX3D, needs THREE only)
+  [7] 게임 메인
+
+  ★ vfx-game-integration-2.js 단독으로 올리면 crash.
+     반드시 [3] VFX core 파일이 먼저 있어야 함.
+  ════════════════════════════════════════════════════════ -->
+
+<!-- [1] Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<!-- [2] Cannon.js (CDN 또는 로컬) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+
+<!-- [3] VFX core — window.VFX 와 EffectPool 을 정의하는 파일들
+         (vfx-game-build.js, vfx-core.js, 또는 네 메인 갤러리 파일)
+         이게 없으면 [4]가 crash.
+         파일 이름은 네 프로젝트에 맞게 교체. -->
+<!-- <script src="vfx-core.js"></script> -->
+<!-- <script src="vfx-game-build.js"></script> -->
+
+<!-- [4] VFX 2D 통합 레이어 (window.VFX 확장, EffectPool 의존) -->
+<!-- <script src="vfx-game-integration-2.js"></script> -->
+
+<!-- [5] Three.js ↔ 2D VFX 브릿지 (window.VFX + window.THREE 의존) -->
+<!-- <script src="vfx-three-bridge.js"></script> -->
+
+<!-- [6] 3D 투사체 파티클 (THREE만 의존 — 단독 동작) -->
+<script src="VFX3D_FORTRESS.js"></script>
+
+<!-- [7] 게임 메인 -->
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   MINIMAL SETUP — VFX3D_FORTRESS.js 단독 테스트
+   [3][4][5] 없이도 동작.  [4][5] 합칠 때 bridge 섹션 주석 해제.
+   ═══════════════════════════════════════════════════════════════ */
+
+const container = document.getElementById('game');
+
+/* ── Three.js 기본 ──────────────────────────────────────────── */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(container.clientWidth, container.clientHeight);
+renderer.setClearColor(0x080810, 1);
+container.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(
+  60, container.clientWidth / container.clientHeight, 0.01, 1000
+);
+camera.position.set(0, 2, 20);
+
+/* ── Cannon.js 물리 ─────────────────────────────────────────── */
+const world = new CANNON.World();
+world.gravity.set(0, -9.82, 0);
+world.broadphase = new CANNON.NaiveBroadphase();
+
+/* ──────────────────────────────────────────────────────────────
+   [4][5] 있을 때 주석 해제:
+
+   const bridge = new VFXThree.VFXThreeBridge(renderer, scene, camera, {
+     layers: [{ label: 'vfx', z: 20 }, { label: 'hud', z: 40 }]
+   });
+
+   ── 2D 이펙트 예시 (bridge 필요):
+   // bridge.spawnScreen('FX12', { layer: 'vfx', bg: false });
+   // bridge.spawnAtWorld('FX12', new THREE.Vector3(3, 0, -5));
+   ────────────────────────────────────────────────────────────── */
+
+/* ── 3D 투사체 선택 (UI 또는 게임 로직에서 변경) ────────────── */
+let vfxType = 'fir'; // eth | elc | fir | ice | wat | ...
+
+/* ── fortressFire — 투사체 발사 (VFX3D_FORTRESS 연동 핵심) ─── */
+function fortressFire(launchPos, targetPos, power) {
+  /* ── Cannon.js 발사체 물리 ──────────────────────────────── */
+  const missileBody = new CANNON.Body({ mass: 1 });
+  missileBody.addShape(new CANNON.Sphere(0.1));
+  missileBody.position.copy(launchPos);
+
+  const dir = new THREE.Vector3().subVectors(targetPos, launchPos).normalize();
+  const spd = (VFX3D.DATA[vfxType]?.SPD ?? 400) * 0.015; // SPD → world units/s
+  missileBody.velocity.set(dir.x * spd, dir.y * spd, dir.z * spd);
+  world.addBody(missileBody);
+
+  /* ── VFX3D 스폰 ──────────────────────────────────────────── */
+  const vfx = VFX3D.FortressVFX.spawn(vfxType, scene);
+
+  /* ── 비행 중 트레일 업데이트 ─────────────────────────────── */
+  let step = 0;
+  const missilePos = new THREE.Vector3();
+  const unsubscribe = _onPhysicsStep(() => {
+    missilePos.copy(missileBody.position);
+
+    // 4스텝마다 트레일 방출 (성능 vs 밀도 균형)
+    if (step % 4 === 0) {
+      vfx.emitTrail(missilePos, dir);
+    }
+    step++;
+
+    /* ── 착탄 판정 (거리 기반 예시 — 실제 판정 로직으로 교체) */
+    const dist = missilePos.distanceTo(targetPos);
+    if (dist < 0.8 || step > 600) {
+      /* ── 폭발 ─────────────────────────────────────────────── */
+      vfx.burst(missilePos);
+      VFX3D.FortressVFX.scheduleDispose(vfx, scene, 2200);
+
+      world.remove(missileBody);
+      unsubscribe();
+
+      /* ── bridge 있으면 2D 히트 이펙트도 같이 ─────────────── */
+      // if (typeof bridge !== 'undefined') {
+      //   bridge.spawnAtWorld('FX_HIT', missilePos, { layer: 'vfx', bg: false });
+      // }
+    }
+  });
+}
+
+/* ── 물리 스텝 콜백 헬퍼 ───────────────────────────────────── */
+const _physicsCallbacks = new Set();
+function _onPhysicsStep(fn) {
+  _physicsCallbacks.add(fn);
+  return () => _physicsCallbacks.delete(fn); // unsubscribe 반환
+}
+
+/* ── 메인 루프 ─────────────────────────────────────────────── */
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05); // 50ms clamp (탭 blur 대비)
+
+  /* ── 물리 업데이트 ───────────────────────────────────────── */
+  world.step(1 / 60, dt, 3);
+  for (const fn of _physicsCallbacks) fn();
+
+  /* ── 2D VFX 브릿지 (있을 때만) ─────────────────────────── */
+  // if (typeof bridge !== 'undefined') bridge.update(dt);
+
+  /* ── 3D 파티클 업데이트 ─────────────────────────────────── */
+  VFX3D.FortressVFX.update(dt);
+
+  renderer.render(scene, camera);
+}
+animate();
+
+/* ── 리사이즈 ───────────────────────────────────────────────── */
+window.addEventListener('resize', () => {
+  const w = container.clientWidth, h = container.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+});
+
+/* ── 테스트: 스페이스바로 발사 ─────────────────────────────── */
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') {
+    const from = new THREE.Vector3(0, 0, 10);
+    const to   = new THREE.Vector3(
+      (Math.random() - 0.5) * 4,
+      (Math.random() - 0.5) * 2,
+      -5
+    );
+    fortressFire(from, to, 1.0);
+  }
+  // 투사체 타입 1~9 숫자키
+  const types = ['eth','elc','fir','ice','wat','dkf','drg','arc','chs'];
+  const idx = parseInt(e.key) - 1;
+  if (idx >= 0 && idx < types.length) vfxType = types[idx];
+});
+</script>
+</body>
+</html>
